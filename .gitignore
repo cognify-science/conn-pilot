@@ -1,0 +1,35 @@
+# Credenciales y configuración local
+.env
+.env.*
+!.env.example
+*.local.yaml
+*.local.yml
+
+# Entornos y cachés Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Datos y artefactos de ejecución locales
+data/
+work/
+generated/
+results/
+logs/
+*.nii
+*.nii.gz
+*.mat
+*.db
+*.sqlite
+*.sqlite3
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
