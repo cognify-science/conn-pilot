@@ -1,0 +1,6 @@
+id: first_level_sbc
+version: 1.0.0
+kind: conn_batch
+requires: [denoised_data]
+provides: [first_level_sbc]
+

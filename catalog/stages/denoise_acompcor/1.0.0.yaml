@@ -1,0 +1,6 @@
+id: denoise_acompcor
+version: 1.0.0
+kind: conn_batch
+requires: [preprocessed_data]
+provides: [denoised_data]
+

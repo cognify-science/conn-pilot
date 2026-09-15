@@ -1,0 +1,7 @@
+id: seed_to_voxel
+name: Seed-to-voxel connectivity
+description: Whole-brain connectivity maps estimated from one or more confirmed seed regions.
+scope:
+  modality: resting_state_fmri
+  software: CONN
+

@@ -1,0 +1,90 @@
+schema_version: conn_pilot_project_v1
+pipeline:
+  id: rsfmri_seed_to_voxel
+  version: 1.0.0
+project:
+  name: example_rsfmri
+  research_question: Estimate mean amygdala connectivity in one resting-state sample.
+dataset:
+  layout: bids
+  root: C:/replace/with/bids/root
+  tr_seconds: 2.0
+subjects:
+  - id: sub-001
+    functional: [C:/replace/sub-001_task-rest_bold.nii.gz]
+    structural: [C:/replace/sub-001_T1w.nii.gz]
+design:
+  type: one_sample
+  groups:
+    sample: [sub-001]
+  covariates: {}
+  contrasts:
+    - name: sample_mean
+      effects: [AllSubjects]
+      weights: [1]
+      rationale: Estimate the sample mean for technical validation.
+      confirmed_by_investigator: true
+seeds:
+  - name: left_amygdala
+    conn_source: atlas.Amygdala l
+    rationale: Example built-in CONN atlas seed.
+    confirmed_by_investigator: true
+parameters:
+  preprocessing:
+    pipeline:
+      value: default_mni
+      source: official_conn_pipeline
+      rationale: Named CONN preprocessing pipeline supported by this version.
+      confirmed_by_investigator: true
+    smoothing_fwhm_mm:
+      value: 8
+      source: pilot_reference
+      rationale: Reference value for the technical pilot.
+      confirmed_by_investigator: true
+    outlier_fd_threshold_mm:
+      value: 0.5
+      source: pilot_reference
+      rationale: Reference ART displacement threshold for the technical pilot.
+      confirmed_by_investigator: true
+    global_signal_z_threshold:
+      value: 3
+      source: pilot_reference
+      rationale: Reference ART global-signal threshold for the technical pilot.
+      confirmed_by_investigator: true
+  denoising:
+    method:
+      value: aCompCor
+      source: pipeline_scope
+      rationale: Denoising method supported by this pipeline version.
+      confirmed_by_investigator: true
+    wm_components:
+      value: 5
+      source: pilot_reference
+      rationale: Reference number of white-matter components.
+      confirmed_by_investigator: true
+    csf_components:
+      value: 5
+      source: pilot_reference
+      rationale: Reference number of CSF components.
+      confirmed_by_investigator: true
+    bandpass_filter_hz:
+      value: [0.008, 0.09]
+      source: pilot_reference
+      rationale: Reference resting-state band-pass filter.
+      confirmed_by_investigator: true
+    detrending_order:
+      value: 1
+      source: pilot_reference
+      rationale: Linear detrending used by the reference execution.
+      confirmed_by_investigator: true
+    despiking:
+      value: 0
+      source: pilot_reference
+      rationale: Despiking disabled in the reference execution.
+      confirmed_by_investigator: true
+    global_signal_regression:
+      value: false
+      source: explicit_investigator_decision
+      rationale: GSR is explicitly disabled for this example.
+      confirmed_by_investigator: true
+

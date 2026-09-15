@@ -1,0 +1,93 @@
+id: rsfmri_seed_to_voxel
+version: 1.0.0
+family: seed_to_voxel
+status: implemented_pending_reference_run
+description: Resting-state seed-to-voxel analysis for one sample or two independent groups.
+compatibility:
+  matlab: R2023b
+  spm: SPM25
+  conn: 25.b
+scope:
+  dataset_layout: bids
+  input_state: raw
+  sessions_per_subject: 1
+  normalization_space: MNI
+  analysis: SBC
+  limitations:
+    - No longitudinal or repeated-measures designs.
+    - No subject-specific ROI files.
+    - Statistical display thresholds are outside this version of the execution contract.
+stages:
+  - id: inspect_dataset
+    version: 1.0.0
+  - id: preprocess_default_mni
+    version: 1.0.0
+  - id: denoise_acompcor
+    version: 1.0.0
+  - id: first_level_sbc
+    version: 1.0.0
+  - id: second_level_glm
+    version: 1.0.0
+  - id: collect_qc
+    version: 1.0.0
+project_contract:
+  design_types: [one_sample, two_independent_groups]
+  parameters:
+    preprocessing.pipeline:
+      type: enum
+      values: [default_mni]
+      confirmation_required: false
+      maps_to: batch.Setup.preprocessing.steps
+    preprocessing.smoothing_fwhm_mm:
+      type: number
+      minimum: 0
+      maximum: 20
+      confirmation_required: true
+      maps_to: batch.Setup.preprocessing.fwhm
+    preprocessing.outlier_fd_threshold_mm:
+      type: number
+      minimum: 0.1
+      maximum: 5
+      confirmation_required: true
+      maps_to: batch.Setup.preprocessing.art_thresholds[2]
+    preprocessing.global_signal_z_threshold:
+      type: number
+      minimum: 0.5
+      maximum: 20
+      confirmation_required: true
+      maps_to: batch.Setup.preprocessing.art_thresholds[1]
+    denoising.method:
+      type: enum
+      values: [aCompCor]
+      confirmation_required: true
+      maps_to: batch.Denoising.confounds
+    denoising.wm_components:
+      type: integer
+      minimum: 1
+      confirmation_required: true
+      maps_to: batch.Denoising.confounds.dimensions[1]
+    denoising.csf_components:
+      type: integer
+      minimum: 1
+      confirmation_required: true
+      maps_to: batch.Denoising.confounds.dimensions[2]
+    denoising.bandpass_filter_hz:
+      type: number_pair
+      confirmation_required: true
+      maps_to: batch.Denoising.filter
+    denoising.detrending_order:
+      type: integer
+      minimum: 0
+      confirmation_required: false
+      maps_to: batch.Denoising.detrending
+    denoising.despiking:
+      type: enum
+      values: [0, 1, 2]
+      confirmation_required: false
+      maps_to: batch.Denoising.despiking
+    denoising.global_signal_regression:
+      type: boolean
+      confirmation_required: true
+      implemented_values: [false]
+      maps_to: explicit_no_gsr_policy
+

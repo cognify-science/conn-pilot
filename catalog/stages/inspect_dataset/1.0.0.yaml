@@ -1,0 +1,6 @@
+id: inspect_dataset
+version: 1.0.0
+kind: validation
+requires: [project]
+provides: [dataset_inventory]
+

@@ -1,0 +1,45 @@
+id: rsfmri_seed_to_voxel_methodology
+version: 1.0.0
+status: provisional_reviewed_for_technical_pilot
+principles:
+  - id: fixed_primary_pipeline
+    statement: Select the primary preprocessing and denoising plan before inspecting inferential results.
+  - id: explicit_human_decisions
+    statement: Seeds, group definitions, contrasts, GSR policy, and exclusion criteria require investigator confirmation.
+  - id: qc_before_inference
+    statement: Review preprocessing and denoising QC before interpreting connectivity results.
+defaults:
+  preprocessing.pipeline:
+    value: default_mni
+    basis: CONN named preprocessing pipeline used by the reference execution.
+  preprocessing.smoothing_fwhm_mm:
+    value: 8
+    basis: Technical reference value inherited from the prior validated run; investigator confirmation remains mandatory.
+  preprocessing.outlier_fd_threshold_mm:
+    value: 0.5
+    basis: Technical reference value inherited from the prior validated run; investigator confirmation remains mandatory.
+  preprocessing.global_signal_z_threshold:
+    value: 3
+    basis: Technical reference value inherited from the prior validated run; investigator confirmation remains mandatory.
+  denoising.method:
+    value: aCompCor
+    basis: Supported denoising strategy for the first pipeline.
+  denoising.wm_components:
+    value: 5
+    basis: Technical reference value inherited from the prior validated run.
+  denoising.csf_components:
+    value: 5
+    basis: Technical reference value inherited from the prior validated run.
+  denoising.bandpass_filter_hz:
+    value: [0.008, 0.09]
+    basis: Technical reference value inherited from the prior validated run; acquisition-specific review remains mandatory.
+references:
+  - id: conn_batch_manual
+    type: official_documentation
+    url: https://web.conn-toolbox.org/resources/conn-manual/conn_batch
+  - id: conn_denoising_qc
+    type: official_documentation
+    url: https://web.conn-toolbox.org/fmri-methods/denoising-pipeline
+notes:
+  - Defaults are not universal scientific recommendations.
+  - Existing paper-derived records remain candidate evidence until individually reviewed for applicability.

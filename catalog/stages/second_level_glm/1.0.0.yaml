@@ -1,0 +1,6 @@
+id: second_level_glm
+version: 1.0.0
+kind: conn_batch
+requires: [first_level_sbc]
+provides: [second_level_results]
+
