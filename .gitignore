@@ -4,6 +4,7 @@
 !.env.example
 *.local.yaml
 *.local.yml
+*.local.json
 
 # Entornos y cachés Python
 .venv/

@@ -20,12 +20,12 @@ La corrida técnica de referencia con tres sujetos terminó correctamente en MAT
 
 El proyecto `conn-automation` sirve como referencia; sus implementaciones y resultados no se consideran automáticamente validados para CONN Pilot.
 
-## Arquitectura propuesta
+## Arquitectura
 
 - Núcleo determinístico para configurar, validar y ejecutar análisis.
 - Catálogo versionado de familias, pipelines y etapas reutilizables.
 - Conocimiento metodológico con fuentes y condiciones de aplicación.
-- Integración mediante MCP y una skill, inicialmente orientada a Claude Science.
+- Servidor MCP local por `stdio`, orientado inicialmente a Claude Science y otros clientes compatibles.
 - Piloto con servicio remoto de coordinación y ejecutor en una desktop.
 
 ## Uso local
@@ -63,6 +63,33 @@ python -m conn_pilot operation get_qc_summary JOB_ID
 `submit_job` guarda el pedido y lanza un proceso local separado, por lo que devuelve el identificador sin esperar a que termine MATLAB. La base SQLite admite una sola ejecución activa para evitar que dos análisis compitan por CPU, memoria y licencias. Las respuestas contienen `schema_version`, `operation`, `ok`, `data`, `errors` y `warnings`. El contrato completo está en `contracts/operations.v1.json`.
 
 El resumen de QC verifica completitud técnica e indexa la evidencia por sujeto. Esta versión deja explícitamente la decisión científica de aceptar o excluir sujetos para revisión humana.
+
+## Servidor MCP local
+
+El servidor MCP usa el SDK oficial Python 2.2.0 y publica las mismas nueve operaciones como herramientas tipadas. No contiene lógica paralela: cada herramienta llama a `OperationService` y devuelve su sobre JSON versionado.
+
+La instalación local queda aislada en `.venv`:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -e .
+```
+
+Un cliente MCP debe iniciar este proceso por `stdio`:
+
+```powershell
+.venv\Scripts\python.exe -m conn_pilot.mcp_server
+```
+
+El proceso no imprime una interfaz: queda esperando mensajes MCP por entrada estándar. `config/mcp-server.example.json` contiene una plantilla portable y `config/claude_desktop.local.json` contiene las rutas absolutas de esta PC; el segundo archivo está excluido de Git.
+
+Las variables admitidas son:
+
+- `CONN_PILOT_CATALOG`: catálogo versionado de pipelines.
+- `CONN_PILOT_ENVIRONMENT`: configuración local de MATLAB, SPM y CONN.
+- `CONN_PILOT_WORK_ROOT`: base SQLite, ejecuciones y resultados.
+
+Este transporte sirve para un cliente que corre en la misma PC. El acceso desde otra computadora requiere la siguiente capa: Streamable HTTP, autenticación y TLS o un túnel privado.
 
 ## Alcance inicial
 

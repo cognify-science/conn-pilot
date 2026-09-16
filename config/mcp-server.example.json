@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "conn-pilot": {
+      "command": "C:\\ABSOLUTE\\PATH\\TO\\conn-pilot\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "conn_pilot.mcp_server"],
+      "env": {
+        "CONN_PILOT_CATALOG": "C:\\ABSOLUTE\\PATH\\TO\\conn-pilot\\catalog",
+        "CONN_PILOT_ENVIRONMENT": "C:\\ABSOLUTE\\PATH\\TO\\conn-pilot\\config\\environment.local.yaml",
+        "CONN_PILOT_WORK_ROOT": "C:\\ABSOLUTE\\PATH\\TO\\conn-pilot\\work"
+      }
+    }
+  }
+}
