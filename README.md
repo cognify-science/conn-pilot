@@ -4,7 +4,7 @@ Asistente de IA para diseñar, validar y ejecutar análisis reproducibles con CO
 
 ## Estado
 
-El motor local v0.1 implementa el primer pipeline determinístico:
+El motor local v0.1 implementa y validó de punta a punta el primer pipeline determinístico:
 
 - resting-state fMRI en BIDS;
 - seed-to-voxel;
@@ -15,6 +15,8 @@ El motor local v0.1 implementa el primer pipeline determinístico:
 - denoising aCompCor;
 - modelos de primer y segundo nivel;
 - trabajos persistentes y manifiestos de resultados.
+
+La corrida técnica de referencia con tres sujetos terminó correctamente en MATLAB R2023b, SPM25 y CONN 25.b; produjo seis mapas SBC de primer nivel y un modelo SPM de segundo nivel para las dos semillas de amígdala.
 
 El proyecto `conn-automation` sirve como referencia; sus implementaciones y resultados no se consideran automáticamente validados para CONN Pilot.
 

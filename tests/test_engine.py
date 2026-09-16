@@ -16,8 +16,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from conn_pilot.adapter import generate_conn_batch  # noqa: E402
 from conn_pilot.catalog import Catalog  # noqa: E402
 from conn_pilot.errors import ExecutionError  # noqa: E402
-from conn_pilot.jobs import JobStore  # noqa: E402
+from conn_pilot.jobs import JobStore, verify_outputs  # noqa: E402
 from conn_pilot.project import validate_project  # noqa: E402
+from conn_pilot.results import collect_artifacts  # noqa: E402
 from conn_pilot.staging import stage_project_inputs  # noqa: E402
 
 
@@ -150,6 +151,41 @@ class EngineTests(unittest.TestCase):
             self.assertTrue(staged_func.with_name("sub-01_task-rest_bold.json").is_file())
             self.assertEqual(len(records), 2)
             self.assertEqual(len(records[0]["source_sha256"]), 64)
+
+    def test_artifact_collector_indexes_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory)
+            project_root = run_dir / "example_rsfmri"
+            qa = project_root / "results" / "qa" / "report.jpg"
+            first = project_root / "results" / "firstlevel" / "SBC_01" / "map.nii"
+            second = project_root / "results" / "secondlevel" / "SBC_01" / "SPM.mat"
+            qc = run_dir / "inputs" / "sub-001" / "func" / "art_screenshot.jpg"
+            preprocessing_qc = run_dir / "inputs" / "sub-001" / "func" / "art_regression_outliers.mat"
+            for path in (qa, first, second, qc, preprocessing_qc):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"result")
+            artifacts = collect_artifacts(self.project, run_dir)
+            self.assertEqual(artifacts["counts"]["qc_images"], 2)
+            self.assertEqual(artifacts["counts"]["first_level_maps"], 1)
+            self.assertEqual(artifacts["counts"]["second_level_maps"], 1)
+            self.assertEqual(artifacts["counts"]["preprocessing_qc"], 1)
+            self.assertTrue((run_dir / "artifacts.json").is_file())
+
+    def test_output_verifier_requires_expected_model_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory)
+            project_root = run_dir / "example_rsfmri"
+            (run_dir / "example_rsfmri.mat").write_bytes(b"project")
+            first = project_root / "results" / "firstlevel" / "SBC_01"
+            second = project_root / "results" / "secondlevel" / "SBC_01" / "contrast"
+            first.mkdir(parents=True)
+            second.mkdir(parents=True)
+            for seed_index in (1, 2):
+                (first / f"BETA_Subject001_Condition001_Source{seed_index:03d}.nii").write_bytes(b"map")
+            (second / "SPM.mat").write_bytes(b"model")
+            verification = verify_outputs(self.project, run_dir)
+            self.assertTrue(verification["valid"], verification["missing"])
+            self.assertEqual(verification["counts"]["first_level_maps"], 2)
 
 
 if __name__ == "__main__":

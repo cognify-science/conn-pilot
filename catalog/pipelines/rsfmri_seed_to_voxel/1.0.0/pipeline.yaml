@@ -1,8 +1,13 @@
 id: rsfmri_seed_to_voxel
 version: 1.0.0
 family: seed_to_voxel
-status: implemented_pending_reference_run
+status: validated_reference_run
 description: Resting-state seed-to-voxel analysis for one sample or two independent groups.
+validation:
+  date: 2026-09-15
+  scope: Technical end-to-end reference run with three subjects and two built-in amygdala seeds.
+  environment: {matlab: R2023b, spm: SPM25, conn: 25.b}
+  evidence: CONN project plus first-level SBC maps and second-level SPM model verified by the engine.
 compatibility:
   matlab: R2023b
   spm: SPM25
@@ -90,4 +95,3 @@ project_contract:
       confirmation_required: true
       implemented_values: [false]
       maps_to: explicit_no_gsr_policy
-

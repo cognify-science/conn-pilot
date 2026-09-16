@@ -9,18 +9,32 @@ from .project import safe_identifier
 
 def collect_artifacts(project: dict[str, Any], run_dir: Path) -> dict[str, Any]:
     project_name = safe_identifier(project["project"]["name"])
-    conn_root = run_dir / project_name
     patterns = {
-        "qc_images": ("results/qa/**/*.jpg", "results/qa/**/*.png"),
-        "first_level_maps": ("results/firstlevel/**/*.nii", "results/firstlevel/**/*.mat"),
-        "second_level_maps": ("results/secondlevel/**/*.nii", "results/secondlevel/**/*.mat"),
-        "preprocessing_qc": ("data/QA_*.mat", "data/art_*.mat"),
+        "qc_images": (
+            f"{project_name}/results/qa/**/*.jpg",
+            f"{project_name}/results/qa/**/*.png",
+            "inputs/**/art_screenshot*.jpg",
+        ),
+        "first_level_maps": (
+            f"{project_name}/results/firstlevel/**/*.nii",
+            f"{project_name}/results/firstlevel/**/*.mat",
+        ),
+        "second_level_maps": (
+            f"{project_name}/results/secondlevel/**/*.nii",
+            f"{project_name}/results/secondlevel/**/*.mat",
+        ),
+        "preprocessing_qc": (
+            f"{project_name}/data/QA_*.mat",
+            "inputs/**/art_*.mat",
+            "inputs/**/art_*.nii",
+            "inputs/**/rp_*.txt",
+        ),
     }
     groups: dict[str, list[dict[str, Any]]] = {}
     for name, globs in patterns.items():
         paths: set[Path] = set()
         for pattern in globs:
-            paths.update(path for path in conn_root.glob(pattern) if path.is_file())
+            paths.update(path for path in run_dir.glob(pattern) if path.is_file())
         groups[name] = [
             {
                 "path": str(path),
@@ -37,4 +51,3 @@ def collect_artifacts(project: dict[str, Any], run_dir: Path) -> dict[str, Any]:
     }
     write_json(run_dir / "artifacts.json", manifest)
     return manifest
-

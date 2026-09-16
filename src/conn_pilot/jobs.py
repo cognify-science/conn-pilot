@@ -173,10 +173,29 @@ def verify_outputs(project: dict[str, Any], run_dir: Path) -> dict[str, Any]:
         "second_level": project_dir / "results" / "secondlevel" / "SBC_01",
     }
     missing = [key for key, path in expected.items() if not path.exists()]
+    expected_first_level_maps = len(project["subjects"]) * len(project["seeds"])
+    first_level_maps = (
+        len(list(expected["first_level"].glob("BETA_Subject*_Condition*_Source*.nii")))
+        if expected["first_level"].is_dir()
+        else 0
+    )
+    second_level_models = (
+        len(list(expected["second_level"].glob("**/SPM.mat"))) if expected["second_level"].is_dir() else 0
+    )
+    if first_level_maps < expected_first_level_maps:
+        missing.append("first_level_maps")
+    if second_level_models < len(project["design"]["contrasts"]):
+        missing.append("second_level_models")
     return {
         "valid": not missing,
         "missing": missing,
         "paths": {key: str(path) for key, path in expected.items()},
+        "counts": {
+            "first_level_maps": first_level_maps,
+            "expected_first_level_maps": expected_first_level_maps,
+            "second_level_models": second_level_models,
+            "expected_second_level_models": len(project["design"]["contrasts"]),
+        },
     }
 
 
