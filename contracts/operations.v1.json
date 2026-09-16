@@ -1,0 +1,72 @@
+{
+  "contract_version": "1.0.0",
+  "request_schema_version": "conn_pilot_operation_request_v1",
+  "response_schema_version": "conn_pilot_operation_response_v1",
+  "request_envelope": {
+    "required": ["schema_version", "operation", "arguments"],
+    "properties": {
+      "schema_version": {"const": "conn_pilot_operation_request_v1"},
+      "operation": {"enum": ["list_pipelines", "inspect_dataset", "validate_project", "generate_execution_plan", "submit_job", "get_job_status", "get_job_logs", "list_results", "get_qc_summary"]},
+      "arguments": {"type": "object"}
+    }
+  },
+  "response_envelope": {
+    "required": ["schema_version", "operation", "ok", "generated_at", "data", "errors", "warnings"],
+    "properties": {
+      "schema_version": {"const": "conn_pilot_operation_response_v1"},
+      "operation": {"type": "string"},
+      "ok": {"type": "boolean"},
+      "generated_at": {"type": "string", "format": "date-time"},
+      "data": {"type": "object"},
+      "errors": {"type": "array", "items": {"type": "string"}},
+      "warnings": {"type": "array", "items": {"type": "string"}}
+    }
+  },
+  "operations": {
+    "list_pipelines": {
+      "arguments": {},
+      "data_required": ["pipelines", "count"],
+      "side_effect": "none"
+    },
+    "inspect_dataset": {
+      "arguments": {"project_path": {"type": "string", "required": true}},
+      "data_required": ["project_path", "layout", "dataset_root", "subject_count", "files", "ready"],
+      "side_effect": "none"
+    },
+    "validate_project": {
+      "arguments": {"project_path": {"type": "string", "required": true}, "check_paths": {"type": "boolean", "default": true}},
+      "data_required": ["project_path", "valid", "pipeline", "subject_count", "seed_count", "contrast_count"],
+      "side_effect": "none"
+    },
+    "generate_execution_plan": {
+      "arguments": {"project_path": {"type": "string", "required": true}},
+      "data_required": ["project_path", "project", "pipeline", "execution", "dataset_inspection", "stages", "parameters", "seeds", "design", "environment", "ready_to_submit"],
+      "side_effect": "none"
+    },
+    "submit_job": {
+      "arguments": {"project_path": {"type": "string", "required": true}},
+      "data_required": ["job", "worker_pid"],
+      "side_effect": "queues and starts one local job"
+    },
+    "get_job_status": {
+      "arguments": {"job_id": {"type": "string", "required": true}},
+      "data_required": ["job", "phase", "terminal"],
+      "side_effect": "none"
+    },
+    "get_job_logs": {
+      "arguments": {"job_id": {"type": "string", "required": true}, "stream": {"enum": ["all", "stdout", "stderr", "worker"], "default": "all"}, "tail": {"type": "integer", "minimum": 1, "maximum": 2000, "default": 200}},
+      "data_required": ["job_id", "state", "logs"],
+      "side_effect": "none"
+    },
+    "list_results": {
+      "arguments": {"job_id": {"type": "string", "required": true}},
+      "data_required": ["job_id", "state", "manifest_path", "artifacts"],
+      "side_effect": "none"
+    },
+    "get_qc_summary": {
+      "arguments": {"job_id": {"type": "string", "required": true}},
+      "data_required": ["job_id", "job_state", "technical_completeness", "subjects", "qc_images", "scientific_qc"],
+      "side_effect": "none"
+    }
+  }
+}

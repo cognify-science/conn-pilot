@@ -84,7 +84,7 @@ class JobStore:
         return job_id
 
     def update(self, job_id: str, state: str, **fields: Any) -> None:
-        allowed = {"batch_path", "return_code", "error"}
+        allowed = {"run_dir", "batch_path", "return_code", "error"}
         unknown = set(fields) - allowed
         if unknown:
             raise ValueError(f"Unknown job fields: {unknown}")
@@ -115,18 +115,50 @@ def run_project(
     store: JobStore,
     run_root: Path,
 ) -> dict[str, Any]:
+    job = queue_project(project, project_path, store, run_root)
+    return execute_queued_project(str(job["id"]), environment, store)
+
+
+def queue_project(
+    project: dict[str, Any],
+    project_path: Path,
+    store: JobStore,
+    run_root: Path,
+) -> dict[str, Any]:
+    """Persist an immutable job request without starting MATLAB."""
     project_name = safe_identifier(project["project"]["name"])
     provisional = run_root / project_name / "pending"
     job_id = store.create(project, provisional)
     run_dir = run_root / project_name / job_id
-    with store._connect() as connection:
-        connection.execute("UPDATE jobs SET run_dir = ? WHERE id = ?", (str(run_dir), job_id))
-    return_code: int | None = None
+    store.update(job_id, "queued", run_dir=str(run_dir))
     try:
         run_dir.mkdir(parents=True, exist_ok=False)
+        shutil.copy2(project_path, run_dir / "project.request.yaml")
+    except Exception as error:
+        store.update(job_id, "failed", error=str(error))
+        raise
+    return store.get(job_id) or {}
+
+
+def execute_queued_project(
+    job_id: str,
+    environment: dict[str, Any],
+    store: JobStore,
+) -> dict[str, Any]:
+    """Execute one previously queued request. Intended for the local worker."""
+    job = store.get(job_id)
+    if not job:
+        raise ExecutionError(f"Unknown job: {job_id}")
+    if job["state"] != "queued":
+        raise ExecutionError(f"Job {job_id} cannot start from state {job['state']}")
+    run_dir = Path(job["run_dir"])
+    request_snapshot = run_dir / "project.request.yaml"
+    from .io import load_yaml
+
+    return_code: int | None = None
+    try:
+        project = load_yaml(request_snapshot)
         store.update(job_id, "preparing")
-        request_snapshot = run_dir / "project.request.yaml"
-        shutil.copy2(project_path, request_snapshot)
         execution_project, staged_inputs = stage_project_inputs(project, run_dir)
         snapshot = run_dir / "project.execution.yaml"
         write_yaml(snapshot, execution_project)

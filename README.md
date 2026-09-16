@@ -44,6 +44,26 @@ python -m conn_pilot jobs list
 
 `examples/reference_project.local.yaml` y `config/environment.local.yaml` contienen rutas de esta PC y están excluidos de Git.
 
+## Operaciones para la IA
+
+El módulo `OperationService` expone nueve operaciones con un sobre JSON estable y versionado. El mismo límite de aplicación puede ser usado desde terminal ahora y, más adelante, por un servidor MCP o una API sin duplicar la lógica científica ni la de ejecución.
+
+```powershell
+python -m conn_pilot operation list_pipelines
+python -m conn_pilot operation inspect_dataset examples/reference_project.local.yaml
+python -m conn_pilot operation validate_project examples/reference_project.local.yaml
+python -m conn_pilot operation generate_execution_plan examples/reference_project.local.yaml
+python -m conn_pilot operation submit_job examples/reference_project.local.yaml
+python -m conn_pilot operation get_job_status JOB_ID
+python -m conn_pilot operation get_job_logs JOB_ID --stream all --tail 200
+python -m conn_pilot operation list_results JOB_ID
+python -m conn_pilot operation get_qc_summary JOB_ID
+```
+
+`submit_job` guarda el pedido y lanza un proceso local separado, por lo que devuelve el identificador sin esperar a que termine MATLAB. La base SQLite admite una sola ejecución activa para evitar que dos análisis compitan por CPU, memoria y licencias. Las respuestas contienen `schema_version`, `operation`, `ok`, `data`, `errors` y `warnings`. El contrato completo está en `contracts/operations.v1.json`.
+
+El resumen de QC verifica completitud técnica e indexa la evidencia por sujeto. Esta versión deja explícitamente la decisión científica de aceptar o excluir sujetos para revisión humana.
+
 ## Alcance inicial
 
 - Investigadores invitados y datos precargados.

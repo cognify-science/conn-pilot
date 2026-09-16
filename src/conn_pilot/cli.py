@@ -10,8 +10,9 @@ from .adapter import generate_conn_batch
 from .catalog import Catalog
 from .environment import check_environment
 from .errors import CatalogError, ConnPilotError, ProjectValidationError
-from .io import load_yaml, write_json
-from .jobs import JobStore, run_project
+from .io import load_yaml
+from .jobs import JobStore, execute_queued_project, run_project
+from .operations import OPERATION_NAMES, OperationService
 from .project import validate_project
 
 
@@ -52,6 +53,20 @@ def build_parser() -> argparse.ArgumentParser:
     jobs.add_argument("action", choices=["list", "show"])
     jobs.add_argument("job_id", nargs="?")
     jobs.add_argument("--jobs-db", default=str(DEFAULT_WORK / "jobs.sqlite3"))
+
+    operation = subparsers.add_parser("operation", help="Invoke the stable AI-facing operation contract")
+    operation.add_argument("name", choices=OPERATION_NAMES)
+    operation.add_argument("target", nargs="?", help="Project path or job id, depending on the operation")
+    operation.add_argument("--environment", default=str(DEFAULT_ENVIRONMENT))
+    operation.add_argument("--work-root", default=str(DEFAULT_WORK))
+    operation.add_argument("--no-check-paths", action="store_true")
+    operation.add_argument("--stream", choices=["all", "stdout", "stderr", "worker"], default="all")
+    operation.add_argument("--tail", type=int, default=200)
+
+    worker = subparsers.add_parser("worker", help=argparse.SUPPRESS)
+    worker.add_argument("job_id")
+    worker.add_argument("--environment", required=True)
+    worker.add_argument("--jobs-db", required=True)
     return parser
 
 
@@ -70,6 +85,26 @@ def main(argv: list[str] | None = None) -> None:
 
 def dispatch(args: argparse.Namespace) -> dict[str, Any] | list[Any]:
     catalog = Catalog(args.catalog)
+    if args.command == "worker":
+        environment = load_yaml(args.environment)
+        return execute_queued_project(args.job_id, environment, JobStore(args.jobs_db))
+    if args.command == "operation":
+        service = OperationService(
+            catalog_root=args.catalog,
+            environment_path=args.environment,
+            work_root=args.work_root,
+        )
+        if args.name == "list_pipelines":
+            return service.list_pipelines()
+        if not args.target:
+            raise ValueError(f"operation {args.name} requires a project path or job id")
+        if args.name in {"inspect_dataset", "generate_execution_plan", "submit_job"}:
+            return getattr(service, args.name)(args.target)
+        if args.name == "validate_project":
+            return service.validate_project(args.target, check_paths=not args.no_check_paths)
+        if args.name == "get_job_logs":
+            return service.get_job_logs(args.target, stream=args.stream, tail=args.tail)
+        return getattr(service, args.name)(args.target)
     if args.command == "catalog":
         if args.action == "list":
             return catalog.list_pipelines()
@@ -120,4 +155,3 @@ def _print(value: Any) -> None:
 
 if __name__ == "__main__":
     main()
-
