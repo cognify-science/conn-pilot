@@ -122,6 +122,8 @@ Cada investigador conecta Codex usando la URL pública y una credencial propia:
 codex mcp add conn-pilot --url https://HOST/mcp --bearer-token-env-var CONN_PILOT_TOKEN
 ```
 
+En Windows también puede usarse `scripts/codex_conn_pilot_headers.ps1` como `http_headers_helper`. El helper obtiene la credencial de `CONN_PILOT_TOKEN` o de un archivo local ignorado por Git, y evita guardar el token dentro de `config.toml`.
+
 ## Alcance inicial
 
 - Investigadores autenticados y datasets registrados en la desktop.
