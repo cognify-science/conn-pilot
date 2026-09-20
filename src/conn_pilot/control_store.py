@@ -46,12 +46,19 @@ class PostgresControlStore:
             """
             CREATE TABLE IF NOT EXISTS cp_credentials (
                 subject TEXT PRIMARY KEY,
-                token_hash TEXT UNIQUE NOT NULL,
+                token_hash TEXT UNIQUE,
                 role TEXT NOT NULL DEFAULT 'researcher',
                 active BOOLEAN NOT NULL DEFAULT TRUE,
+                provider TEXT NOT NULL DEFAULT 'local',
+                email TEXT,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """,
+            "ALTER TABLE cp_credentials ALTER COLUMN token_hash DROP NOT NULL",
+            "ALTER TABLE cp_credentials ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'local'",
+            "ALTER TABLE cp_credentials ADD COLUMN IF NOT EXISTS email TEXT",
+            "ALTER TABLE cp_credentials ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()",
             """
             CREATE TABLE IF NOT EXISTS cp_workers (
                 id TEXT PRIMARY KEY,
@@ -146,7 +153,8 @@ class PostgresControlStore:
                 """
                 INSERT INTO cp_credentials(subject, token_hash, role, active)
                 VALUES (%s, %s, %s, TRUE)
-                ON CONFLICT(subject) DO UPDATE SET token_hash=EXCLUDED.token_hash, role=EXCLUDED.role, active=TRUE
+                ON CONFLICT(subject) DO UPDATE SET token_hash=EXCLUDED.token_hash, role=EXCLUDED.role,
+                    provider='local', active=TRUE, updated_at=NOW()
                 """,
                 (subject, token_digest(token), role),
             )
@@ -159,6 +167,28 @@ class PostgresControlStore:
                 (digest,),
             ).fetchone()
         return dict(row) if row else None
+
+    def ensure_external_credential(
+        self,
+        subject: str,
+        *,
+        provider: str,
+        email: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Provision a verified external identity without reactivating revoked users."""
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                INSERT INTO cp_credentials(subject, token_hash, role, active, provider, email)
+                VALUES (%s, NULL, 'researcher', TRUE, %s, %s)
+                ON CONFLICT(subject) DO UPDATE SET
+                    email=COALESCE(EXCLUDED.email, cp_credentials.email), updated_at=NOW()
+                RETURNING subject, role, active, provider, email
+                """,
+                (subject, provider, email),
+            ).fetchone()
+        value = dict(row) if row else None
+        return value if value and value["active"] else None
 
     def register_worker(self, worker_id: str, label: str, capabilities: dict[str, Any]) -> None:
         with self._connect() as connection:

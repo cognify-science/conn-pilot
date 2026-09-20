@@ -126,6 +126,19 @@ codex mcp add conn-pilot --url https://HOST/mcp --bearer-token-env-var CONN_PILO
 
 En Windows también puede usarse `scripts/codex_conn_pilot_headers.ps1` como `http_headers_helper`. El helper obtiene la credencial de `CONN_PILOT_TOKEN` o de un archivo local ignorado por Git, y evita guardar el token dentro de `config.toml`.
 
+### Identidad de investigadores
+
+El plano de control puede validar tokens OAuth breves emitidos por Auth0 además de la credencial administrativa local usada durante la migración. La API de Auth0 debe usar como identificador la URL MCP pública exacta, JWT RFC 9068 firmado con RS256 y el permiso `conn-pilot:use`. En el tenant se habilitan Resource Parameter Compatibility Profile, Client ID Metadata Document (CIMD) Registration y Dynamic Client Registration (DCR) para admitir clientes MCP actuales.
+
+```env
+CONN_PILOT_AUTH0_ISSUER=https://your-tenant.us.auth0.com/
+CONN_PILOT_AUTH0_AUDIENCE=https://your-service.example/mcp
+```
+
+El servidor verifica firma, emisor, audiencia, vencimiento y sujeto contra el JWKS publicado por Auth0. La primera solicitud válida registra el identificador externo como investigador; una identidad revocada localmente no se reactiva al iniciar sesión otra vez. Los proyectos y trabajos siguen aislados por sujeto autenticado.
+
+Durante el piloto, el registro público de la conexión de base de datos de Auth0 debe permanecer deshabilitado. El administrador crea o invita cada usuario antes de que conecte su cliente MCP. DCR permite registrar clientes como ChatGPT o Claude; no habilita por sí mismo una cuenta de investigador.
+
 ## Alcance inicial
 
 - Investigadores autenticados y datasets registrados en la desktop.

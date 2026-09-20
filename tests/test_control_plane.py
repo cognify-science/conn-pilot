@@ -4,6 +4,7 @@ import copy
 import io
 import sys
 import tempfile
+import time
 import unittest
 import urllib.error
 from pathlib import Path
@@ -11,6 +12,8 @@ from typing import Any
 from unittest.mock import patch
 
 import yaml
+import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +24,7 @@ from mcp import Client  # noqa: E402
 from conn_pilot.control_plane import (  # noqa: E402
     ControlPlaneService,
     ControlSettings,
+    HybridTokenVerifier,
     build_control_plane_server,
 )
 from conn_pilot.distributed_worker import (  # noqa: E402
@@ -55,9 +59,26 @@ class FakeStore:
         self.projects: dict[str, dict[str, Any]] = {}
         self.jobs: dict[str, dict[str, Any]] = {}
         self.validations: dict[str, dict[str, Any]] = {}
+        self.external_credentials: dict[str, dict[str, Any]] = {}
 
     def verify_credential(self, token: str) -> dict[str, Any] | None:
         return {"subject": "owner", "role": "admin"} if token == "x" * 48 else None
+
+    def ensure_external_credential(
+        self, subject: str, *, provider: str, email: str | None = None
+    ) -> dict[str, Any] | None:
+        existing = self.external_credentials.get(subject)
+        if existing and not existing["active"]:
+            return None
+        value = existing or {
+            "subject": subject,
+            "role": "researcher",
+            "active": True,
+            "provider": provider,
+            "email": email,
+        }
+        self.external_credentials[subject] = value
+        return value
 
     def list_datasets(self) -> list[dict[str, Any]]:
         return list(self.datasets.values())
@@ -145,6 +166,46 @@ def remote_spec() -> dict[str, Any]:
 
 
 class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
+    async def test_auth0_jwt_is_verified_and_provisions_researcher(self) -> None:
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key = private_key.public_key()
+
+        class SigningKey:
+            key = public_key
+
+        class JwkClient:
+            def get_signing_key_from_jwt(self, _token: str) -> SigningKey:
+                return SigningKey()
+
+        now = int(time.time())
+        token = jwt.encode(
+            {
+                "iss": "https://brainai.us.auth0.com/",
+                "aud": "https://control.example/mcp",
+                "sub": "auth0|researcher-1",
+                "iat": now,
+                "exp": now + 300,
+                "scope": "openid profile",
+                "client_id": "mcp-client",
+            },
+            private_key,
+            algorithm="RS256",
+        )
+        store = FakeStore()
+        verifier = HybridTokenVerifier(
+            store,
+            "https://control.example/mcp",
+            auth0_issuer="https://brainai.us.auth0.com/",
+            auth0_audience="https://control.example/mcp",
+            jwk_client=JwkClient(),
+        )
+        access = await verifier.verify_token(token)
+        self.assertIsNotNone(access)
+        assert access is not None
+        self.assertEqual(access.subject, "auth0:auth0|researcher-1")
+        self.assertIn("conn-pilot:use", access.scopes)
+        self.assertEqual(store.external_credentials[access.subject]["role"], "researcher")
+
     def test_project_is_validated_and_queued_without_local_paths(self) -> None:
         store = FakeStore()
         service = ControlPlaneService(store, ROOT / "catalog")

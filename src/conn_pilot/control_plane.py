@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -10,6 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlsplit
+
+import jwt
+from jwt import PyJWKClient
 
 try:
     import boto3
@@ -37,6 +41,9 @@ REMOTE_SPEC_FIELDS = {"project", "design", "seeds", "parameters"}
 
 class Store(Protocol):
     def verify_credential(self, token: str) -> dict[str, Any] | None: ...
+    def ensure_external_credential(
+        self, subject: str, *, provider: str, email: str | None = None
+    ) -> dict[str, Any] | None: ...
     def list_datasets(self) -> list[dict[str, Any]]: ...
     def get_dataset(self, dataset_id: str) -> dict[str, Any] | None: ...
     def create_project(
@@ -68,26 +75,84 @@ class ControlSettings:
     host: str
     port: int
     lease_seconds: int = 300
+    auth0_issuer: str = ""
+    auth0_audience: str = ""
 
     @property
     def mcp_url(self) -> str:
         return f"{self.public_base_url.rstrip('/')}/mcp"
 
 
-class DatabaseTokenVerifier(TokenVerifier):
-    def __init__(self, store: Store, resource: str) -> None:
+class HybridTokenVerifier(TokenVerifier):
+    """Accept legacy local credentials and short-lived Auth0 JWT access tokens."""
+
+    def __init__(
+        self,
+        store: Store,
+        resource: str,
+        *,
+        auth0_issuer: str = "",
+        auth0_audience: str = "",
+        jwk_client: Any | None = None,
+    ) -> None:
         self.store = store
         self.resource = resource
+        self.auth0_issuer = auth0_issuer.rstrip("/") + "/" if auth0_issuer else ""
+        self.auth0_audience = auth0_audience
+        self.jwk_client = (
+            jwk_client
+            if jwk_client is not None
+            else PyJWKClient(f"{self.auth0_issuer}.well-known/jwks.json", cache_keys=True)
+            if self.auth0_issuer
+            else None
+        )
 
     async def verify_token(self, token: str) -> AccessToken | None:
         identity = self.store.verify_credential(token)
+        if identity:
+            scopes = ["conn-pilot:use"]
+            if identity.get("role") == "admin":
+                scopes.append("conn-pilot:admin")
+            return AccessToken(
+                token=token,
+                client_id="conn-pilot-local",
+                subject=str(identity["subject"]),
+                scopes=scopes,
+                resource=self.resource,
+            )
+        if not self.jwk_client or not self.auth0_issuer or not self.auth0_audience:
+            return None
+        try:
+            signing_key = await asyncio.to_thread(self.jwk_client.get_signing_key_from_jwt, token)
+            claims = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256"],
+                audience=self.auth0_audience,
+                issuer=self.auth0_issuer,
+                options={"require": ["exp", "iat", "iss", "aud", "sub"]},
+            )
+        except jwt.PyJWTError:
+            return None
+        subject = f"auth0:{claims['sub']}"
+        identity = self.store.ensure_external_credential(
+            subject,
+            provider="auth0",
+            email=claims.get("email") if claims.get("email_verified") else None,
+        )
         if not identity:
             return None
+        raw_scope = claims.get("scope", "")
+        scopes = raw_scope.split() if isinstance(raw_scope, str) else list(raw_scope)
+        if "conn-pilot:use" not in scopes:
+            scopes.append("conn-pilot:use")
+        if identity.get("role") == "admin":
+            scopes.append("conn-pilot:admin")
         return AccessToken(
             token=token,
-            client_id="conn-pilot-codex",
-            subject=str(identity["subject"]),
-            scopes=["conn-pilot:use"],
+            client_id=str(claims.get("client_id") or claims.get("azp") or "oauth-client"),
+            subject=subject,
+            scopes=scopes,
             resource=self.resource,
         )
 
@@ -352,12 +417,22 @@ def load_control_settings() -> ControlSettings:
         host=os.environ.get("CONN_PILOT_REMOTE_HOST", "0.0.0.0"),
         port=port,
         lease_seconds=int(os.environ.get("CONN_PILOT_LEASE_SECONDS", "300")),
+        auth0_issuer=os.environ.get("CONN_PILOT_AUTH0_ISSUER", ""),
+        auth0_audience=os.environ.get("CONN_PILOT_AUTH0_AUDIENCE", ""),
     )
     if len(values.admin_token) < 32 or len(values.worker_token) < 32:
         raise ValueError("Admin and worker tokens must contain at least 32 characters")
     parsed = urlsplit(values.public_base_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path not in {"", "/"}:
         raise ValueError("CONN_PILOT_PUBLIC_BASE_URL must be an HTTP(S) origin without a path")
+    if bool(values.auth0_issuer) != bool(values.auth0_audience):
+        raise ValueError("CONN_PILOT_AUTH0_ISSUER and CONN_PILOT_AUTH0_AUDIENCE must be configured together")
+    if values.auth0_issuer:
+        auth0 = urlsplit(values.auth0_issuer)
+        if auth0.scheme != "https" or not auth0.netloc or auth0.path not in {"", "/"}:
+            raise ValueError("CONN_PILOT_AUTH0_ISSUER must be an HTTPS origin")
+        if values.auth0_audience.rstrip("/") != values.mcp_url.rstrip("/"):
+            raise ValueError("CONN_PILOT_AUTH0_AUDIENCE must match the public MCP URL")
     return values
 
 
@@ -373,10 +448,20 @@ def build_control_plane_server(
     service = ControlPlaneService(store, catalog_root)
     parsed = urlsplit(settings.public_base_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
-    verifier = DatabaseTokenVerifier(store, settings.mcp_url) if require_mcp_auth else None
+    verifier = (
+        HybridTokenVerifier(
+            store,
+            settings.mcp_url,
+            auth0_issuer=settings.auth0_issuer,
+            auth0_audience=settings.auth0_audience,
+        )
+        if require_mcp_auth
+        else None
+    )
+    issuer_url = settings.auth0_issuer or f"{origin}/"
     auth = (
         AuthSettings(
-            issuer_url=AnyHttpUrl(f"{origin}/"),
+            issuer_url=AnyHttpUrl(issuer_url),
             resource_server_url=AnyHttpUrl(settings.mcp_url),
             required_scopes=["conn-pilot:use"],
             validate_token_resource=True,
