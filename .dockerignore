@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+.tools
+config/*.local.*
+data
+work
+results
+logs
+*.nii
+*.nii.gz
+*.mat
+*.sqlite3
+__pycache__
+tests
+examples

@@ -9,6 +9,7 @@
 # Entornos y cachés Python
 .venv/
 venv/
+.tools/
 __pycache__/
 *.py[cod]
 .pytest_cache/

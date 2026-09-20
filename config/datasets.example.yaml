@@ -1,0 +1,11 @@
+schema_version: conn_pilot_dataset_registry_v1
+datasets:
+  - id: study_001
+    label: Example local BIDS study
+    root: D:/Neuroimaging/study_001
+    layout: bids
+    tr_seconds: 2.0
+    subjects:
+      - id: sub-001
+        functional: [sub-001/func/sub-001_task-rest_bold.nii.gz]
+        structural: [sub-001/anat/sub-001_T1w.nii.gz]

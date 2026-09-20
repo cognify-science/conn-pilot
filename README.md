@@ -25,8 +25,9 @@ El proyecto `conn-automation` sirve como referencia; sus implementaciones y resu
 - Núcleo determinístico para configurar, validar y ejecutar análisis.
 - Catálogo versionado de familias, pipelines y etapas reutilizables.
 - Conocimiento metodológico con fuentes y condiciones de aplicación.
-- Servidor MCP local por `stdio`, orientado inicialmente a Claude Science y otros clientes compatibles.
-- Piloto con servicio remoto de coordinación y ejecutor en una desktop.
+- Servidor MCP local por `stdio` para desarrollo y diagnóstico.
+- Plano de control MCP en Railway con PostgreSQL, almacenamiento de artefactos y autenticación.
+- Worker en una desktop que conserva las neuroimágenes localmente y reclama trabajos cuando está disponible.
 
 ## Uso local
 
@@ -81,7 +82,7 @@ Un cliente MCP debe iniciar este proceso por `stdio`:
 .venv\Scripts\python.exe -m conn_pilot.mcp_server
 ```
 
-El proceso no imprime una interfaz: queda esperando mensajes MCP por entrada estándar. `config/mcp-server.example.json` contiene una plantilla portable y `config/claude_desktop.local.json` contiene las rutas absolutas de esta PC; el segundo archivo está excluido de Git.
+El proceso no imprime una interfaz: queda esperando mensajes MCP por entrada estándar. `config/mcp-server.example.json` contiene una plantilla portable.
 
 Las variables admitidas son:
 
@@ -91,14 +92,42 @@ Las variables admitidas son:
 
 Este transporte sirve para un cliente que corre en la misma PC. El acceso desde otra computadora requiere la siguiente capa: Streamable HTTP, autenticación y TLS o un túnel privado.
 
+## Arquitectura distribuida
+
+`conn_pilot.control_plane` publica un MCP Streamable HTTP permanentemente disponible. Guarda usuarios, proyectos, cola, leases y eventos en PostgreSQL. Los archivos seleccionados de resultados se guardan en un bucket S3 privado. Las neuroimágenes y sus rutas permanecen en la desktop.
+
+`conn_pilot.distributed_worker` establece únicamente conexiones HTTPS salientes. Publica un inventario sanitizado de datasets, reclama un trabajo mediante un lease, materializa el YAML con rutas locales, ejecuta el motor determinístico y sube manifiestos, QC y resultados finales seleccionados.
+
+```text
+Codex -> MCP/API Railway -> PostgreSQL
+                         -> bucket de resultados
+                              ^
+                              | HTTPS saliente
+                         worker desktop -> MATLAB/SPM/CONN -> neuroimágenes locales
+```
+
+El contrato está en `contracts/distributed.v1.json`. Los ejemplos de configuración son `config/control-plane.example.env`, `config/worker.example.env` y `config/datasets.example.yaml`.
+
+El worker se inicia con:
+
+```powershell
+.venv\Scripts\python.exe -m conn_pilot.distributed_worker
+```
+
+Cada investigador conecta Codex usando la URL pública y una credencial propia:
+
+```powershell
+codex mcp add conn-pilot --url https://HOST/mcp --bearer-token-env-var CONN_PILOT_TOKEN
+```
+
 ## Alcance inicial
 
-- Investigadores invitados y datos precargados.
+- Investigadores autenticados y datasets registrados en la desktop.
 - Proyectos y decisiones versionados.
 - Validación explícita de capacidades y parámetros.
 - Ejecuciones trazables, con controles de calidad y revisión del investigador.
 
-La transferencia remota y el ciclo de vida completo de datasets propios quedan para una etapa posterior.
+Las imágenes fuente no se transfieren a Railway. La incorporación de un dataset nuevo requiere registrarlo localmente en la desktop.
 
 ## Garantías del motor
 

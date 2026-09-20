@@ -7,11 +7,18 @@ name = "conn-pilot"
 version = "0.1.0"
 description = "Local deterministic engine for validated CONN analyses"
 requires-python = ">=3.11"
-dependencies = ["PyYAML>=6.0", "mcp==2.2.0"]
+dependencies = [
+  "PyYAML>=6.0",
+  "boto3>=1.35,<2",
+  "mcp==2.2.0",
+  "psycopg[binary]>=3.2,<4",
+]
 
 [project.scripts]
 conn-pilot = "conn_pilot.cli:main"
 conn-pilot-mcp = "conn_pilot.mcp_server:main"
+conn-pilot-control = "conn_pilot.control_plane:main"
+conn-pilot-worker = "conn_pilot.distributed_worker:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

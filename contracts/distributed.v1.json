@@ -1,0 +1,29 @@
+{
+  "schema_version": "conn_pilot_distributed_contract_v1",
+  "identifiers": {
+    "dataset_id": "Opaque identifier mapped to a private path only by the local worker",
+    "project_id": "Remote path-free scientific project specification",
+    "job_id": "Persistent queued execution identifier"
+  },
+  "job_states": ["queued", "running", "succeeded", "failed", "cancelled"],
+  "job_phases": [
+    "waiting_for_worker",
+    "claimed",
+    "validating",
+    "staging",
+    "running_matlab",
+    "collecting_results",
+    "uploading_results",
+    "succeeded",
+    "failed"
+  ],
+  "lease": {
+    "owner": "worker_id",
+    "renewal": "Authenticated heartbeat",
+    "expiration": "Makes a running job eligible for a later claim"
+  },
+  "data_boundary": {
+    "railway": ["sanitized dataset metadata", "projects", "jobs", "events", "selected result artifacts"],
+    "worker": ["dataset paths", "source neuroimages", "writable execution copies", "large derivatives"]
+  }
+}

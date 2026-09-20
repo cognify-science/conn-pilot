@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from mcp.server import MCPServer
+from mcp.server.auth.provider import TokenVerifier
+from mcp.server.auth.settings import AuthSettings
 from mcp.types import ToolAnnotations
 
 from .operations import REQUEST_SCHEMA, OperationService
@@ -27,10 +29,15 @@ def build_operation_service() -> OperationService:
     )
 
 
-def build_mcp_server(service: OperationService | None = None) -> MCPServer:
+def build_mcp_server(
+    service: OperationService | None = None,
+    *,
+    token_verifier: TokenVerifier | None = None,
+    auth: AuthSettings | None = None,
+) -> MCPServer:
     """Expose the deterministic engine as nine MCP tools."""
     operation_service = service or build_operation_service()
-    server = MCPServer("CONN Pilot")
+    server = MCPServer("CONN Pilot", token_verifier=token_verifier, auth=auth)
     read_only = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
     def invoke(operation: str, arguments: dict[str, Any]) -> dict[str, Any]:
