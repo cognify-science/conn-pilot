@@ -10,11 +10,12 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from .control_plane import materialize_remote_project
-from .io import load_yaml, sha256_file, write_yaml
+from .io import load_yaml, sha256_file, write_json, write_yaml
 from .mcp_server import build_operation_service
 
 
@@ -108,39 +109,76 @@ def inventory_record(dataset: dict[str, Any]) -> dict[str, Any]:
 
 
 class WorkerClient:
-    def __init__(self, base_url: str, token: str, timeout: int = 60) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        timeout: int = 60,
+        *,
+        retry_attempts: int | None = None,
+        sleeper: Callable[[float], None] = time.sleep,
+    ) -> None:
         if len(token) < 32:
             raise ValueError("Worker token must contain at least 32 characters")
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.timeout = timeout
+        self.retry_attempts = retry_attempts
+        self.sleeper = sleeper
+
+    def _retry(self, attempt: int, error: Exception) -> None:
+        if self.retry_attempts is not None and attempt >= self.retry_attempts:
+            raise RuntimeError(f"Control plane is unavailable after {attempt} attempts: {error}") from error
+        self.sleeper(min(30.0, float(2 ** min(attempt - 1, 5))))
 
     def post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        request = urllib.request.Request(
-            f"{self.base_url}{path}",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                value = json.load(response)
-        except urllib.error.HTTPError as error:
-            body = error.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Control plane returned HTTP {error.code}: {body[:500]}") from error
+        attempt = 0
+        while True:
+            attempt += 1
+            request = urllib.request.Request(
+                f"{self.base_url}{path}",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    value = json.load(response)
+                break
+            except urllib.error.HTTPError as error:
+                if error.code not in {408, 425, 429} and error.code < 500:
+                    body = error.read().decode("utf-8", errors="replace")
+                    raise RuntimeError(
+                        f"Control plane returned HTTP {error.code}: {body[:500]}"
+                    ) from error
+                self._retry(attempt, error)
+            except (urllib.error.URLError, TimeoutError, OSError) as error:
+                self._retry(attempt, error)
         if not isinstance(value, dict):
             raise RuntimeError("Control plane returned a non-object response")
         return value
 
     def upload(self, url: str, path: Path, content_type: str) -> None:
-        request = urllib.request.Request(
-            url,
-            data=path.read_bytes(),
-            headers={"Content-Type": content_type},
-            method="PUT",
-        )
-        with urllib.request.urlopen(request, timeout=max(self.timeout, 300)):
-            return
+        payload = path.read_bytes()
+        attempt = 0
+        while True:
+            attempt += 1
+            request = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": content_type},
+                method="PUT",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=max(self.timeout, 300)):
+                    return
+            except urllib.error.HTTPError as error:
+                if error.code not in {408, 425, 429} and error.code < 500:
+                    body = error.read().decode("utf-8", errors="replace")
+                    raise RuntimeError(f"Artifact upload returned HTTP {error.code}: {body[:500]}") from error
+                self._retry(attempt, error)
+            except (urllib.error.URLError, TimeoutError, OSError) as error:
+                self._retry(attempt, error)
 
 
 class DistributedWorker:
@@ -210,12 +248,23 @@ class DistributedWorker:
         project_path = remote_dir / "project.yaml"
         write_yaml(project_path, project_definition)
         service = build_operation_service()
-        submitted = service.submit_job(str(project_path))
-        if not submitted["ok"]:
-            errors = sanitize_for_remote(submitted["errors"], [dataset["root"], str(self.work_root)])
-            self._complete(remote_job_id, "failed", {"submission_errors": errors}, "; ".join(errors))
-            return
-        local_job_id = str(submitted["data"]["job"]["id"])
+        state_path = remote_dir / "worker-state.json"
+        local_job_id = self._restored_local_job_id(state_path, service)
+        if not local_job_id:
+            submitted = service.submit_job(str(project_path))
+            if not submitted["ok"]:
+                errors = sanitize_for_remote(submitted["errors"], [dataset["root"], str(self.work_root)])
+                self._complete(remote_job_id, "failed", {"submission_errors": errors}, "; ".join(errors))
+                return
+            local_job_id = str(submitted["data"]["job"]["id"])
+            write_json(
+                state_path,
+                {
+                    "schema_version": "conn_pilot_worker_state_v1",
+                    "remote_job_id": remote_job_id,
+                    "local_job_id": local_job_id,
+                },
+            )
         last_heartbeat = 0.0
         while True:
             status = service.get_job_status(local_job_id)
@@ -248,6 +297,19 @@ class DistributedWorker:
             },
             None,
         )
+
+    @staticmethod
+    def _restored_local_job_id(state_path: Path, service: Any) -> str | None:
+        if not state_path.is_file():
+            return None
+        try:
+            value = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if value.get("schema_version") != "conn_pilot_worker_state_v1":
+            return None
+        local_job_id = str(value.get("local_job_id", ""))
+        return local_job_id if local_job_id and service.store.get(local_job_id) else None
 
     def run_once(self) -> bool:
         self.heartbeat()

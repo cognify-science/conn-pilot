@@ -247,6 +247,11 @@ class ControlPlaneService:
         job = self.store.create_job(project)
         return _response("submit_job", {"job": job})
 
+    def retry_job(self, subject: str, job_id: str) -> dict[str, Any]:
+        self._job(job_id, subject)
+        job = self.store.retry_job(job_id, subject)
+        return _response("retry_job", {"job": job})
+
     def get_job_status(self, subject: str, job_id: str) -> dict[str, Any]:
         job = self._job(job_id, subject)
         return _response(
@@ -434,6 +439,11 @@ def build_control_plane_server(
     def submit_job(project_id: str) -> dict[str, Any]:
         """Queue a project for execution when its assigned local worker becomes available."""
         return service.submit_job(subject(), project_id)
+
+    @server.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False))
+    def retry_job(job_id: str) -> dict[str, Any]:
+        """Queue an owned failed job again after a recoverable worker or connectivity interruption."""
+        return service.retry_job(subject(), job_id)
 
     @server.tool(annotations=read_only)
     def get_job_status(job_id: str) -> dict[str, Any]:

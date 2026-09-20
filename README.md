@@ -98,6 +98,8 @@ Este transporte sirve para un cliente que corre en la misma PC. El acceso desde 
 
 `conn_pilot.distributed_worker` establece únicamente conexiones HTTPS salientes. Publica un inventario sanitizado de datasets, reclama un trabajo mediante un lease, materializa el YAML con rutas locales, ejecuta el motor determinístico y sube manifiestos, QC y resultados finales seleccionados.
 
+La conexión de la desktop puede interrumpirse. MATLAB/CONN continúa localmente y el worker conserva la asociación entre el trabajo remoto y el trabajo local, reintenta la sincronización con espera exponencial y publica el resultado cuando Railway vuelve a estar disponible. Un trabajo remoto que ya haya sido marcado como fallido por una interrupción recuperable puede volver a la cola con `retry_job` sin repetir una ejecución local que siga registrada.
+
 ```text
 Codex -> MCP/API Railway -> PostgreSQL
                          -> bucket de resultados

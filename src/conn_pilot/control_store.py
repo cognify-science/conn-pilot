@@ -293,6 +293,31 @@ class PostgresControlStore:
             row = connection.execute(query, parameters).fetchone()
         return dict(row) if row else None
 
+    def retry_job(self, job_id: str, subject: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            with connection.transaction():
+                row = connection.execute(
+                    """
+                    UPDATE cp_jobs SET state='queued', phase='waiting_for_worker', worker_id=NULL,
+                        lease_expires_at=NULL, result_summary=NULL, error=NULL, finished_at=NULL,
+                        updated_at=NOW()
+                    WHERE id=%s AND owner_subject=%s AND state='failed'
+                    RETURNING id, owner_subject, project_id, dataset_id, state, phase, attempts,
+                              created_at::text AS created_at, updated_at::text AS updated_at
+                    """,
+                    (job_id, subject),
+                ).fetchone()
+                if not row:
+                    raise ValueError("Only an owned failed job can be retried")
+                connection.execute(
+                    """
+                    INSERT INTO cp_job_events(job_id, kind, message)
+                    VALUES (%s, 'retry_queued', 'Failed job queued for retry')
+                    """,
+                    (job_id,),
+                )
+        return dict(row)
+
     def get_events(self, job_id: str, subject: str) -> list[dict[str, Any]]:
         with self._connect() as connection:
             rows = connection.execute(

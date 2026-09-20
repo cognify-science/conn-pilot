@@ -20,7 +20,8 @@
   "lease": {
     "owner": "worker_id",
     "renewal": "Authenticated heartbeat",
-    "expiration": "Makes a running job eligible for a later claim"
+    "expiration": "Makes a running job eligible for a later claim",
+    "offline_behavior": "Local MATLAB execution continues; the worker retries control-plane synchronization with bounded exponential backoff"
   },
   "data_boundary": {
     "railway": ["sanitized dataset metadata", "projects", "jobs", "events", "selected result artifacts"],

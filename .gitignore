@@ -25,6 +25,7 @@ work/
 generated/
 results/
 logs/
+MathWorks/
 *.nii
 *.nii.gz
 *.mat

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import copy
+import io
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import yaml
 
@@ -20,7 +23,12 @@ from conn_pilot.control_plane import (  # noqa: E402
     ControlSettings,
     build_control_plane_server,
 )
-from conn_pilot.distributed_worker import inventory_record, load_registry, sanitize_for_remote  # noqa: E402
+from conn_pilot.distributed_worker import (  # noqa: E402
+    WorkerClient,
+    inventory_record,
+    load_registry,
+    sanitize_for_remote,
+)
 from conn_pilot.io import load_yaml  # noqa: E402
 
 
@@ -91,6 +99,13 @@ class FakeStore:
             "attempts": 0,
         }
         self.jobs[value["id"]] = value
+        return value
+
+    def retry_job(self, job_id: str, subject: str) -> dict[str, Any]:
+        value = self.get_job(job_id, subject)
+        if not value or value["state"] != "failed":
+            raise ValueError("Only an owned failed job can be retried")
+        value.update(state="queued", phase="waiting_for_worker", error=None)
         return value
 
     def get_job(self, job_id: str, subject: str | None = None) -> dict[str, Any] | None:
@@ -170,6 +185,7 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                 "validate_project",
                 "generate_execution_plan",
                 "submit_job",
+                "retry_job",
                 "get_job_status",
                 "get_job_logs",
                 "list_results",
@@ -179,6 +195,35 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(pipelines.structured_content["data"]["count"], 1)
         self.assertEqual(datasets.structured_content["data"]["count"], 1)
+
+    def test_worker_retries_a_temporary_dns_failure(self) -> None:
+        sleeps: list[float] = []
+        client = WorkerClient(
+            "https://control.example",
+            "x" * 48,
+            retry_attempts=2,
+            sleeper=sleeps.append,
+        )
+        response = io.BytesIO(b'{"ok": true}')
+        with patch(
+            "conn_pilot.distributed_worker.urllib.request.urlopen",
+            side_effect=[urllib.error.URLError("temporary DNS failure"), response],
+        ):
+            result = client.post("/worker/v1/heartbeat", {"worker_id": "one"})
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(sleeps, [1.0])
+
+    def test_failed_remote_job_can_be_requeued(self) -> None:
+        store = FakeStore()
+        project = store.create_project(
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+        )
+        job = store.create_job(project)
+        job.update(state="failed", phase="failed", error="temporary network failure")
+        service = ControlPlaneService(store, ROOT / "catalog")
+        retried = service.retry_job("owner", job["id"])
+        self.assertTrue(retried["ok"])
+        self.assertEqual(retried["data"]["job"]["state"], "queued")
 
     def test_worker_inventory_never_contains_local_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
