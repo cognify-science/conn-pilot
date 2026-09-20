@@ -116,6 +116,8 @@ El worker se inicia con:
 .venv\Scripts\python.exe -m conn_pilot.distributed_worker
 ```
 
+En la desktop Windows, `scripts/run_distributed_worker.ps1` carga la configuración local y mantiene el worker consultando la cola. El script impide instancias duplicadas y reinicia el proceso si termina inesperadamente; un acceso directo en la carpeta de inicio de Windows hace que vuelva a operar después de reiniciar la PC.
+
 Cada investigador conecta Codex usando la URL pública y una credencial propia:
 
 ```powershell
