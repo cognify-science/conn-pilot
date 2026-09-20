@@ -364,7 +364,8 @@ def build_control_plane_server(
     require_mcp_auth: bool = True,
 ) -> MCPServer:
     storage = artifact_storage or ArtifactStorage()
-    service = ControlPlaneService(store, REPO_ROOT / "catalog")
+    catalog_root = Path(os.environ.get("CONN_PILOT_CATALOG", REPO_ROOT / "catalog"))
+    service = ControlPlaneService(store, catalog_root)
     parsed = urlsplit(settings.public_base_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
     verifier = DatabaseTokenVerifier(store, settings.mcp_url) if require_mcp_auth else None
