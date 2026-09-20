@@ -135,9 +135,9 @@ CONN_PILOT_AUTH0_ISSUER=https://your-tenant.us.auth0.com/
 CONN_PILOT_AUTH0_AUDIENCE=https://your-service.example/mcp
 ```
 
-El servidor verifica firma, emisor, audiencia, vencimiento y sujeto contra el JWKS publicado por Auth0. La primera solicitud válida registra el identificador externo como investigador; una identidad revocada localmente no se reactiva al iniciar sesión otra vez. Los proyectos y trabajos siguen aislados por sujeto autenticado.
+El servidor verifica firma, emisor, audiencia, vencimiento, sujeto y el permiso `conn-pilot:use` contra el JWKS publicado por Auth0. Acepta el permiso tanto en `scope` como en `permissions`, según el perfil de token emitido por Auth0. La primera solicitud válida registra el identificador externo como investigador; una identidad revocada localmente no se reactiva al iniciar sesión otra vez. Los proyectos y trabajos siguen aislados por sujeto autenticado.
 
-Durante el piloto, el registro público de la conexión de base de datos de Auth0 debe permanecer deshabilitado. El administrador crea o invita cada usuario antes de que conecte su cliente MCP. DCR permite registrar clientes como ChatGPT o Claude; no habilita por sí mismo una cuenta de investigador.
+Durante el piloto se usa la conexión Passwordless Email de Auth0 con códigos de seis dígitos, altas públicas deshabilitadas y promoción a nivel de dominio para clientes OAuth de terceros. El administrador incorpora cada correo antes de que el investigador conecte su cliente MCP. DCR permite registrar clientes como Codex, ChatGPT o Claude; no habilita por sí mismo una cuenta de investigador. Auth0 puede usar su proveedor de correo incorporado para la prueba inicial; antes de producción debe configurarse un proveedor SMTP propio.
 
 ## Alcance inicial
 

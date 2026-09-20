@@ -134,6 +134,18 @@ class HybridTokenVerifier(TokenVerifier):
             )
         except jwt.PyJWTError:
             return None
+        raw_scope = claims.get("scope", "")
+        scopes = raw_scope.split() if isinstance(raw_scope, str) else list(raw_scope)
+        raw_permissions = claims.get("permissions", [])
+        permissions = (
+            raw_permissions.split()
+            if isinstance(raw_permissions, str)
+            else list(raw_permissions)
+        )
+        scopes = list(dict.fromkeys([*scopes, *permissions]))
+        if "conn-pilot:use" not in scopes:
+            return None
+
         subject = f"auth0:{claims['sub']}"
         identity = self.store.ensure_external_credential(
             subject,
@@ -142,10 +154,6 @@ class HybridTokenVerifier(TokenVerifier):
         )
         if not identity:
             return None
-        raw_scope = claims.get("scope", "")
-        scopes = raw_scope.split() if isinstance(raw_scope, str) else list(raw_scope)
-        if "conn-pilot:use" not in scopes:
-            scopes.append("conn-pilot:use")
         if identity.get("role") == "admin":
             scopes.append("conn-pilot:admin")
         return AccessToken(

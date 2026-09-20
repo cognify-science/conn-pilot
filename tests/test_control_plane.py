@@ -185,7 +185,7 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                 "sub": "auth0|researcher-1",
                 "iat": now,
                 "exp": now + 300,
-                "scope": "openid profile",
+                "scope": "openid profile conn-pilot:use",
                 "client_id": "mcp-client",
             },
             private_key,
@@ -205,6 +205,83 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(access.subject, "auth0:auth0|researcher-1")
         self.assertIn("conn-pilot:use", access.scopes)
         self.assertEqual(store.external_credentials[access.subject]["role"], "researcher")
+
+    async def test_auth0_jwt_without_required_permission_is_rejected(self) -> None:
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key = private_key.public_key()
+
+        class SigningKey:
+            key = public_key
+
+        class JwkClient:
+            def get_signing_key_from_jwt(self, _token: str) -> SigningKey:
+                return SigningKey()
+
+        now = int(time.time())
+        token = jwt.encode(
+            {
+                "iss": "https://brainai.us.auth0.com/",
+                "aud": "https://control.example/mcp",
+                "sub": "auth0|researcher-without-permission",
+                "iat": now,
+                "exp": now + 300,
+                "scope": "openid profile",
+                "client_id": "mcp-client",
+            },
+            private_key,
+            algorithm="RS256",
+        )
+        store = FakeStore()
+        verifier = HybridTokenVerifier(
+            store,
+            "https://control.example/mcp",
+            auth0_issuer="https://brainai.us.auth0.com/",
+            auth0_audience="https://control.example/mcp",
+            jwk_client=JwkClient(),
+        )
+
+        self.assertIsNone(await verifier.verify_token(token))
+        self.assertNotIn("auth0:auth0|researcher-without-permission", store.external_credentials)
+
+    async def test_auth0_permission_claim_is_accepted(self) -> None:
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key = private_key.public_key()
+
+        class SigningKey:
+            key = public_key
+
+        class JwkClient:
+            def get_signing_key_from_jwt(self, _token: str) -> SigningKey:
+                return SigningKey()
+
+        now = int(time.time())
+        token = jwt.encode(
+            {
+                "iss": "https://brainai.us.auth0.com/",
+                "aud": "https://control.example/mcp",
+                "sub": "email|researcher-with-permission",
+                "iat": now,
+                "exp": now + 300,
+                "scope": "openid profile",
+                "permissions": ["conn-pilot:use"],
+                "client_id": "mcp-client",
+            },
+            private_key,
+            algorithm="RS256",
+        )
+        store = FakeStore()
+        verifier = HybridTokenVerifier(
+            store,
+            "https://control.example/mcp",
+            auth0_issuer="https://brainai.us.auth0.com/",
+            auth0_audience="https://control.example/mcp",
+            jwk_client=JwkClient(),
+        )
+
+        access = await verifier.verify_token(token)
+        self.assertIsNotNone(access)
+        assert access is not None
+        self.assertIn("conn-pilot:use", access.scopes)
 
     def test_project_is_validated_and_queued_without_local_paths(self) -> None:
         store = FakeStore()
