@@ -8,6 +8,12 @@ import zipfile
 from datetime import datetime, timezone
 from typing import Any
 
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
 
 def build_reproducibility_package(
     *,
@@ -16,6 +22,7 @@ def build_reproducibility_package(
     review: dict[str, Any],
     artifacts: list[dict[str, Any]],
     method_decisions: list[dict[str, Any]],
+    attachments: list[dict[str, Any]] | None = None,
 ) -> tuple[bytes, dict[str, Any]]:
     """Build a compact, machine-readable audit package without copying raw imaging data."""
     created_at = datetime.now(timezone.utc).isoformat()
@@ -44,6 +51,7 @@ def build_reproducibility_package(
     }
     methods = _methods_markdown(project, review, method_decisions)
     report_html = _report_html(report)
+    report_pdf = _report_pdf(report)
     decisions_csv = _decisions_csv(subject_rows)
     dataset_description = {
         "Name": project["spec"].get("project", {}).get("name", "CONN Pilot derivatives"),
@@ -61,6 +69,7 @@ def build_reproducibility_package(
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as package:
         package.writestr("report.html", report_html)
+        package.writestr("report.pdf", report_pdf)
         package.writestr("report.json", _json(report))
         package.writestr("methods.md", methods)
         package.writestr("parameters.json", _json(project["spec"].get("parameters", {})))
@@ -71,6 +80,8 @@ def build_reproducibility_package(
             "artifact-manifest.json",
             _json(report["artifacts"]),
         )
+        for attachment in attachments or []:
+            package.writestr(str(attachment["path"]), attachment["content"])
     manifest = {
         "schema_version": "conn_pilot_reproducibility_package_manifest_v1",
         "created_at": created_at,
@@ -83,10 +94,13 @@ def build_reproducibility_package(
         "included_subject_ids": review["sample"]["included_subject_ids"],
         "excluded_subject_ids": review["sample"]["excluded_subject_ids"],
         "files": [
-            "report.html", "report.json", "methods.md", "parameters.json",
+            "report.html", "report.pdf", "report.json", "methods.md", "parameters.json",
             "literature.json", "subject-decisions.csv", "dataset_description.json",
             "artifact-manifest.json",
+            *[str(item["path"]) for item in attachments or []],
         ],
+        "embedded_artifact_count": len(attachments or []),
+        "embedded_artifact_bytes": sum(len(item["content"]) for item in attachments or []),
     }
     return buffer.getvalue(), manifest
 
@@ -158,6 +172,95 @@ code{{white-space:pre-wrap}}.badge{{display:inline-block;padding:.25rem .5rem;ba
 <tbody>{''.join(rows)}</tbody></table><h2>Audit record</h2>
 <p>This report binds technical completeness, subject decisions, the effective sample and the active second-level version.</p>
 </body></html>"""
+
+
+def _report_pdf(report: dict[str, Any]) -> bytes:
+    """Render a compact archival PDF; detailed machine-readable evidence remains in JSON."""
+    buffer = io.BytesIO()
+    styles = getSampleStyleSheet()
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=16 * mm,
+        leftMargin=16 * mm,
+        topMargin=16 * mm,
+        bottomMargin=16 * mm,
+        title="CONN Pilot reproducibility report",
+        author="CONN Pilot",
+    )
+    project = report["project"]["spec"].get("project", {})
+    review = report["review"]
+    story = [
+        Paragraph(html.escape(str(project.get("name", "CONN Pilot report"))), styles["Title"]),
+        Paragraph(html.escape(str(project.get("research_question", ""))), styles["BodyText"]),
+        Spacer(1, 5 * mm),
+        Paragraph("Version binding", styles["Heading2"]),
+        Paragraph(
+            f"Result: <font name='Courier'>{html.escape(str(report['job'].get('result_version')))}</font><br/>"
+            f"Sample: <font name='Courier'>{html.escape(str(review['sample']['version']))}</font><br/>"
+            f"Second level: {html.escape(str(review['second_level']['status']))}",
+            styles["BodyText"],
+        ),
+        Spacer(1, 5 * mm),
+        Paragraph("Subject quality review", styles["Heading2"]),
+    ]
+    rows = [["Subject", "Decision", "Outliers", "tSNR", "DVARS mean"]]
+    for item in review["subject_quality"]["subjects"]:
+        decision = item.get("decision") or {}
+        metrics = item.get("metrics") or {}
+        rows.append([
+            str(item.get("subject_id", "")),
+            str(decision.get("decision") or "needs_review"),
+            _metric(metrics, "outlier_percent", suffix="%"),
+            _metric(metrics, "tsnr_median"),
+            _metric(metrics, "dvars_mean"),
+        ])
+    table = Table(rows, repeatRows=1, colWidths=[35 * mm, 35 * mm, 28 * mm, 28 * mm, 35 * mm])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8EEF8")),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#AAB4C3")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F9FC")]),
+    ]))
+    story.extend([table, Spacer(1, 5 * mm)])
+    included = ", ".join(review["sample"]["included_subject_ids"]) or "none"
+    excluded = ", ".join(review["sample"]["excluded_subject_ids"]) or "none"
+    story.extend([
+        Paragraph("Effective sample", styles["Heading2"]),
+        Paragraph(
+            f"Included: {html.escape(included)}<br/>Excluded: {html.escape(excluded)}",
+            styles["BodyText"],
+        ),
+        Spacer(1, 4 * mm),
+        Paragraph(
+            "This report binds technical completeness, subject decisions, the effective sample "
+            "and the active second-level version. The ZIP also contains the detailed audit record.",
+            styles["BodyText"],
+        ),
+    ])
+    def page_footer(canvas: Any, document: Any) -> None:
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#C7CED9"))
+        canvas.line(16 * mm, 11 * mm, A4[0] - 16 * mm, 11 * mm)
+        canvas.setFillColor(colors.HexColor("#596273"))
+        canvas.setFont("Helvetica", 7)
+        canvas.drawString(16 * mm, 7 * mm, f"Generated {report['created_at']}")
+        canvas.drawRightString(A4[0] - 16 * mm, 7 * mm, f"Page {document.page}")
+        canvas.restoreState()
+
+    document.build(story, onFirstPage=page_footer, onLaterPages=page_footer)
+    return buffer.getvalue()
+
+
+def _metric(metrics: dict[str, Any], name: str, *, suffix: str = "") -> str:
+    value = metrics.get(name)
+    if value is None:
+        return "n/a"
+    if isinstance(value, float):
+        return f"{value:.3f}{suffix}"
+    return f"{value}{suffix}"
 
 
 def _json(value: Any) -> str:

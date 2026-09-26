@@ -295,6 +295,20 @@ class ArtifactStorage:
         )
         return object_key
 
+    def get_bytes(self, object_key: str, *, max_bytes: int) -> bytes:
+        if not self.client:
+            raise ValueError("Artifact bucket is not configured")
+        response = self.client.get_object(Bucket=self.bucket, Key=object_key)
+        declared = int(response.get("ContentLength") or 0)
+        if declared > max_bytes:
+            response["Body"].close()
+            raise ValueError("Artifact exceeds the reproducibility package size limit")
+        content = response["Body"].read(max_bytes + 1)
+        response["Body"].close()
+        if len(content) > max_bytes:
+            raise ValueError("Artifact exceeds the reproducibility package size limit")
+        return content
+
 
 class ControlPlaneService:
     def __init__(
@@ -701,10 +715,14 @@ class ControlPlaneService:
         project = self._project(job["project_id"], subject)
         artifacts = self.store.list_artifacts(job_id, subject)
         decisions = self.store.list_method_decisions(project["id"], subject)
+        attachments, attachment_warnings = self._package_attachments(
+            artifacts, review, storage
+        )
         content, manifest = build_reproducibility_package(
             job=job, project=project, review=review, artifacts=artifacts,
-            method_decisions=decisions,
+            method_decisions=decisions, attachments=attachments,
         )
+        manifest["attachment_warnings"] = attachment_warnings
         digest = hashlib.sha256(content).hexdigest()
         name = f"conn-pilot-{job_id[:8]}-{sample_version.removeprefix('sha256:')[:8]}.zip"
         object_key = storage.put_bytes(job_id, name, "application/zip", content)
@@ -717,7 +735,53 @@ class ControlPlaneService:
             "generate_reproducibility_package",
             {"artifact": artifact, "manifest": manifest,
              "download_url": storage.download_url(object_key), "expires_in": 3600},
+            warnings=attachment_warnings,
         )
+
+    @staticmethod
+    def _package_attachments(
+        artifacts: list[dict[str, Any]], review: dict[str, Any], storage: ArtifactStorage,
+        *, max_total_bytes: int = 64 * 1024 * 1024,
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        active = review["second_level"].get("active_recalculation") or {}
+        active_run_id = active.get("id")
+        selected: list[dict[str, Any]] = []
+        for artifact in artifacts:
+            kind = artifact.get("kind")
+            if kind == "qc_images":
+                selected.append(artifact)
+            elif active_run_id and kind == "second_level_version":
+                if artifact.get("second_level_run_id") == active_run_id:
+                    selected.append(artifact)
+            elif not active_run_id and kind == "second_level_maps":
+                selected.append(artifact)
+        selected.sort(key=lambda item: (
+            0 if item.get("kind") == "qc_images" else 1,
+            str(item.get("subject_id") or ""), str(item.get("name") or ""),
+        ))
+        attachments: list[dict[str, Any]] = []
+        warnings: list[str] = []
+        remaining = max_total_bytes
+        for artifact in selected:
+            size = int(artifact.get("bytes") or 0)
+            if size and size > remaining:
+                warnings.append(f"Skipped {artifact.get('name')}: package size limit reached")
+                continue
+            try:
+                content = storage.get_bytes(str(artifact["object_key"]), max_bytes=remaining)
+            except Exception:
+                warnings.append(f"Could not embed {artifact.get('name')}: artifact could not be read")
+                continue
+            folder = "qc"
+            if artifact.get("kind") != "qc_images":
+                folder = "second-level"
+            elif artifact.get("subject_id"):
+                folder += "/" + _safe_package_name(str(artifact["subject_id"]))
+            name = _safe_package_name(str(artifact.get("name") or "artifact"))
+            unique = str(artifact.get("id") or hashlib.sha256(content).hexdigest())[:12]
+            attachments.append({"path": f"{folder}/{unique}-{name}", "content": content})
+            remaining -= len(content)
+        return attachments, warnings
 
     def _review_state(self, subject: str, job: dict[str, Any]) -> dict[str, Any]:
         result_version = job.get("result_version")
@@ -1858,6 +1922,10 @@ def _response(
         "errors": errors or [],
         "warnings": warnings or [],
     }
+
+
+def _safe_package_name(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", Path(value).name).strip("._") or "artifact"
 
 
 def _now() -> str:

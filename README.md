@@ -124,7 +124,7 @@ El MCP remoto expone operaciones para revisar y cerrar una versión de resultado
 - `record_scientific_decision`: registra `accept`, `reject` o `needs_review` para el análisis completo.
 - `request_second_level_recalculation`: congela la muestra aceptada y encola solamente el segundo nivel.
 - `get_second_level_recalculation`: informa el estado y la versión del modelo grupal.
-- `generate_reproducibility_package`: genera un ZIP con informe, métodos, parámetros, literatura, decisiones y hashes.
+- `generate_reproducibility_package`: genera un ZIP versionado con informe PDF/HTML/JSON, métodos, parámetros, literatura, decisiones, láminas QC, mapas vigentes y hashes.
 - `create_review_link`: crea un enlace interactivo de una hora para revisar el trabajo en `/review`.
 
 Cada decisión guarda la identidad autenticada, la fecha, `result_version` y,
