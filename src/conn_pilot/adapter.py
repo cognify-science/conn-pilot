@@ -89,6 +89,7 @@ def _render_batch(project: dict[str, Any], project_path: Path, run_dir: Path) ->
             "",
         ]
     )
+    lines.extend(_render_extended_qc(run_dir))
     lines.extend(_render_qc_metrics(subjects, preprocessing, run_dir))
     lines.extend(_render_results(design["contrasts"], seeds))
     lines.append("")
@@ -108,6 +109,21 @@ def _render_effects(subjects: list[dict[str, Any]], design: dict[str, Any]) -> l
     for index, vector in enumerate(vectors, start=1):
         lines.append(f"batch.Setup.subjects.effects{{{index}}} = [{'; '.join(_number(item) for item in vector)}];")
     return lines
+
+
+def _render_extended_qc(run_dir: Path) -> list[str]:
+    folder = _matlab_string((run_dir / "qc_extended").as_posix())
+    return [
+        "% Native CONN visual QA report",
+        "clear qa_batch;",
+        "qa_batch.filename = batch.filename;",
+        f"qa_batch.QA.foldername = '{folder}';",
+        "qa_batch.QA.plots = [1 2 3 10 9 11 12];",
+        "qa_batch.QA.sets = 1;",
+        "qa_batch.QA.conditions = {'rest'};",
+        "conn_batch(qa_batch);",
+        "",
+    ]
 
 
 def _render_qc_metrics(
@@ -138,10 +154,17 @@ def _render_qc_metrics(
                 f"    qc_subjects({index}).volume_count = size(art_data.R, 1);",
                 f"    qc_subjects({index}).outlier_count = sum(any(abs(art_data.R) > eps, 1));",
                 f"    qc_subjects({index}).outlier_percent = 100 * qc_subjects({index}).outlier_count / max(1, qc_subjects({index}).volume_count);",
+                f"    qc_subjects({index}).retained_volume_count = qc_subjects({index}).volume_count - qc_subjects({index}).outlier_count;",
+                "    art_flags = any(abs(art_data.R) > eps, 1);",
+                "    art_edges = diff([false art_flags false]);",
+                "    art_starts = find(art_edges == 1); art_ends = find(art_edges == -1) - 1;",
+                f"    qc_subjects({index}).longest_outlier_streak = max([0 art_ends - art_starts + 1]);",
                 "else",
                 f"    qc_subjects({index}).volume_count = 0;",
                 f"    qc_subjects({index}).outlier_count = 0;",
                 f"    qc_subjects({index}).outlier_percent = 0;",
+                f"    qc_subjects({index}).retained_volume_count = 0;",
+                f"    qc_subjects({index}).longest_outlier_streak = 0;",
                 "end",
                 "if ~isempty(art_timeseries_files)",
                 "    art_series = load(fullfile(art_timeseries_files(1).folder, art_timeseries_files(1).name), 'R');",
@@ -153,6 +176,31 @@ def _render_qc_metrics(
                 f"    qc_subjects({index}).motion_max_mm = 0;",
                 f"    qc_subjects({index}).motion_mean_mm = 0;",
                 "end",
+                f"preprocessed_files = dir(fullfile('{_matlab_string(functional_dir)}', 'swa*.nii'));",
+                "if ~isempty(preprocessed_files)",
+                "    qc_volumes = spm_vol(fullfile(preprocessed_files(1).folder, preprocessed_files(1).name));",
+                "    qc_first = spm_read_vols(qc_volumes(1));",
+                "    qc_mask = isfinite(qc_first) & abs(qc_first) > eps;",
+                "    qc_sum = zeros(size(qc_first)); qc_sumsq = zeros(size(qc_first));",
+                "    qc_dvars = zeros(max(0, numel(qc_volumes)-1), 1); qc_previous = [];",
+                "    for qc_index = 1:numel(qc_volumes)",
+                "        qc_image = spm_read_vols(qc_volumes(qc_index));",
+                "        qc_image(~isfinite(qc_image)) = 0;",
+                "        qc_sum = qc_sum + qc_image; qc_sumsq = qc_sumsq + qc_image.^2;",
+                "        if ~isempty(qc_previous), qc_delta = qc_image(qc_mask)-qc_previous(qc_mask); qc_dvars(qc_index-1)=sqrt(mean(qc_delta.^2)); end",
+                "        qc_previous = qc_image;",
+                "    end",
+                "    qc_mean = qc_sum / max(1,numel(qc_volumes));",
+                "    qc_variance = max(0,(qc_sumsq - numel(qc_volumes)*qc_mean.^2) / max(1,numel(qc_volumes)-1));",
+                "    qc_tsnr = qc_mean(qc_mask) ./ sqrt(qc_variance(qc_mask)); qc_tsnr = qc_tsnr(isfinite(qc_tsnr));",
+                f"    qc_subjects({index}).tsnr_median = median(qc_tsnr);",
+                f"    qc_subjects({index}).dvars_mean = mean(qc_dvars);",
+                f"    qc_subjects({index}).dvars_max = max(qc_dvars);",
+                "else",
+                f"    qc_subjects({index}).tsnr_median = 0;",
+                f"    qc_subjects({index}).dvars_mean = 0;",
+                f"    qc_subjects({index}).dvars_max = 0;",
+                "end",
             ]
         )
     metrics_path = _matlab_string((run_dir / "qc_metrics.json").as_posix())
@@ -163,7 +211,7 @@ def _render_qc_metrics(
             "if qc_metrics_file < 0, error('CONN Pilot could not create qc_metrics.json'); end",
             "fprintf(qc_metrics_file, '%s', jsonencode(qc_metrics));",
             "fclose(qc_metrics_file);",
-            "clear art_data art_series art_outlier_files art_timeseries_files art_image_files qc_metrics_file;",
+            "clear art_data art_series art_outlier_files art_timeseries_files art_image_files art_flags art_edges art_starts art_ends preprocessed_files qc_volumes qc_first qc_mask qc_sum qc_sumsq qc_dvars qc_previous qc_image qc_delta qc_mean qc_variance qc_tsnr qc_index qc_metrics_file;",
             "",
         ]
     )

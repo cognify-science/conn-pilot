@@ -8,7 +8,18 @@
       "outlier_percent",
       "global_signal_z_max",
       "motion_max_mm",
-      "motion_mean_mm"
+      "motion_mean_mm",
+      "retained_volume_count",
+      "longest_outlier_streak",
+      "tsnr_median",
+      "dvars_mean",
+      "dvars_max",
+      "structural-to-MNI image",
+      "functional-to-MNI image",
+      "functional-to-anatomical registration image",
+      "grey-matter segmentation image",
+      "ART time-series image",
+      "before/after denoising image"
     ],
     "thresholds": ["global_signal_z", "motion_mm"]
   },
@@ -26,7 +37,9 @@
   "sample": {
     "version": "SHA-256 of the ordered included subject identifiers",
     "on_exclusion_change": "Existing second-level results become stale and blocked",
-    "unblock": "Run a result version whose computed sample matches the reviewed sample"
+    "unblock": "Run a versioned second-level task whose computed sample matches the reviewed sample",
+    "minimum_one_sample_size": 2,
+    "history": "Earlier group results and artifacts remain immutable and addressable"
   },
   "states": {
     "technical_completeness": "Whether execution and required artifacts completed",
@@ -43,6 +56,10 @@
     "get_qc_summary",
     "get_subject_qc",
     "set_subject_qc_decision",
-    "record_scientific_decision"
+    "record_scientific_decision",
+    "request_second_level_recalculation",
+    "get_second_level_recalculation",
+    "generate_reproducibility_package",
+    "create_review_link"
   ]
 }

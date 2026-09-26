@@ -17,6 +17,7 @@ from typing import Any
 from .control_plane import materialize_remote_project
 from .io import load_yaml, sha256_file, write_json, write_yaml
 from .mcp_server import build_operation_service
+from .second_level import run_second_level_recalculation
 
 
 def load_registry(path: str | Path) -> dict[str, dict[str, Any]]:
@@ -226,6 +227,13 @@ class DistributedWorker:
         )
         return response.get("job")
 
+    def claim_second_level(self) -> dict[str, Any] | None:
+        response = self.client.post(
+            "/worker/v1/second-level/claim",
+            {"worker_id": self.worker_id, "dataset_ids": sorted(self.registry)},
+        )
+        return response.get("second_level_run")
+
     def run_job(self, remote_job: dict[str, Any]) -> None:
         remote_job_id = str(remote_job["id"])
         dataset_id = str(remote_job["dataset_id"])
@@ -314,6 +322,15 @@ class DistributedWorker:
 
     def run_once(self) -> bool:
         self.heartbeat()
+        second_level = self.claim_second_level()
+        if second_level:
+            try:
+                self.run_second_level(second_level)
+            except Exception as error:
+                self._complete_second_level(
+                    str(second_level["id"]), "failed", {}, f"Worker error: {error}"
+                )
+            return True
         job = self.claim()
         if not job:
             return False
@@ -322,6 +339,95 @@ class DistributedWorker:
         except Exception as error:
             self._complete(str(job["id"]), "failed", {}, f"Worker error: {error}")
         return True
+
+    def run_second_level(self, task: dict[str, Any]) -> None:
+        run_id = str(task["id"])
+        source = dict(task["source_job"])
+        remote_job_id = str(task["job_id"])
+        local_job_id = str((source.get("result_summary") or {}).get("local_job_id", ""))
+        service = build_operation_service()
+        local_job = service.store.get(local_job_id) if local_job_id else None
+        if not local_job or local_job.get("state") != "succeeded":
+            raise ValueError("The source CONN execution is not available on this worker")
+        run_dir = Path(str(local_job["run_dir"]))
+        project = load_yaml(run_dir / "project.execution.yaml")
+        self.client.post(
+            f"/worker/v1/second-level/{run_id}/heartbeat",
+            {"worker_id": self.worker_id, "phase": "running_matlab"},
+        )
+        result = run_second_level_recalculation(
+            project, run_dir, run_id, str(task["sample_version"]),
+            [str(value) for value in task["included_subject_ids"]],
+            load_yaml(service.environment_path),
+        )
+        uploaded = self._upload_second_level(
+            remote_job_id, run_id, result["artifact_paths"], Path(result["output_dir"])
+        )
+        self._complete_second_level(
+            run_id, "succeeded",
+            {
+                "local_job_id": local_job_id,
+                "sample_version": task["sample_version"],
+                "included_subject_ids": task["included_subject_ids"],
+                "model_count": result["manifest"]["model_count"],
+                "uploads": uploaded,
+            },
+            None,
+        )
+
+    def _complete_second_level(
+        self, run_id: str, state: str, summary: dict[str, Any], error: str | None
+    ) -> None:
+        roots = [str(self.work_root), *(dataset["root"] for dataset in self.registry.values())]
+        self.client.post(
+            f"/worker/v1/second-level/{run_id}/complete",
+            {
+                "worker_id": self.worker_id,
+                "state": state,
+                "summary": sanitize_for_remote(summary, roots),
+                "error": sanitize_for_remote(error, roots) if error else None,
+            },
+        )
+
+    def _upload_second_level(
+        self, remote_job_id: str, run_id: str, paths: list[Path], output_dir: Path
+    ) -> dict[str, Any]:
+        uploaded = skipped = total_bytes = 0
+        for path in paths:
+            if not path.is_file():
+                continue
+            size = path.stat().st_size
+            if size > self.max_artifact_bytes:
+                skipped += 1
+                continue
+            content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            prepared = self.client.post(
+                f"/worker/v1/jobs/{remote_job_id}/artifacts/prepare",
+                {"worker_id": self.worker_id, "name": f"{run_id}-{path.name}",
+                 "content_type": content_type},
+            )
+            self.client.upload(prepared["upload_url"], path, content_type)
+            relative_path = (
+                path.relative_to(output_dir).as_posix()
+                if path.is_relative_to(output_dir) else path.name
+            )
+            self.client.post(
+                f"/worker/v1/jobs/{remote_job_id}/artifacts/complete",
+                {
+                    "worker_id": self.worker_id,
+                    "kind": "second_level_version",
+                    "name": path.name,
+                    "object_key": prepared["object_key"],
+                    "bytes": size,
+                    "sha256": sha256_file(path),
+                    "content_type": content_type,
+                    "metadata": {"relative_path": relative_path},
+                    "second_level_run_id": run_id,
+                },
+            )
+            uploaded += 1
+            total_bytes += size
+        return {"uploaded": uploaded, "skipped_too_large": skipped, "bytes": total_bytes}
 
     def _complete(
         self, job_id: str, state: str, summary: dict[str, Any], error: str | None
@@ -340,6 +446,8 @@ class DistributedWorker:
     def _upload_selected(
         self, remote_job_id: str, run_dir: Path, manifest: dict[str, Any]
     ) -> dict[str, Any]:
+        project = load_yaml(run_dir / "project.execution.yaml")
+        subject_ids = [str(item["id"]) for item in project.get("subjects", [])]
         candidates: list[tuple[str, Path, str | None, dict[str, Any]]] = []
         for name in (
             "artifacts.json",
@@ -356,13 +464,19 @@ class DistributedWorker:
             for item in manifest.get("groups", {}).get(group, []):
                 path = Path(str(item.get("path", "")))
                 if path.is_file():
-                    subject_id = _artifact_subject(item.get("relative_path")) if group == "qc_images" else None
+                    subject_id = (
+                        _artifact_subject(item.get("relative_path"), subject_ids)
+                        if group == "qc_images" else None
+                    )
                     candidates.append(
                         (
                             group,
                             path,
                             subject_id,
-                            {"relative_path": item.get("relative_path")},
+                            {
+                                "relative_path": item.get("relative_path"),
+                                "qc_type": _qc_type(item.get("relative_path")),
+                            },
                         )
                     )
         uploaded = 0
@@ -398,13 +512,34 @@ class DistributedWorker:
         return {"uploaded": uploaded, "skipped_too_large": skipped, "bytes": total_bytes}
 
 
-def _artifact_subject(relative_path: Any) -> str | None:
+def _artifact_subject(relative_path: Any, subject_ids: list[str] | None = None) -> str | None:
     parts = Path(str(relative_path or "")).parts
     try:
         index = parts.index("inputs")
     except ValueError:
+        match = re.search(r"subject(\d+)", str(relative_path or ""), re.IGNORECASE)
+        if match and subject_ids:
+            offset = int(match.group(1)) - 1
+            return subject_ids[offset] if 0 <= offset < len(subject_ids) else None
         return None
     return parts[index + 1] if len(parts) > index + 1 else None
+
+
+def _qc_type(relative_path: Any) -> str:
+    name = Path(str(relative_path or "")).name.lower()
+    if name.startswith("art_screenshot"):
+        return "art"
+    for prefix, value in (
+        ("qa_norm_structural", "normalization_structural"),
+        ("qa_norm_functional", "normalization_functional"),
+        ("qa_norm_greymatter", "segmentation_grey_matter"),
+        ("qa_reg_functional", "functional_anatomical_registration"),
+        ("qa_timeart", "time_series_art"),
+        ("qa_denoise_timeseries", "denoising_timeseries"),
+    ):
+        if name.startswith(prefix):
+            return value
+    return "other"
 
 
 def build_parser() -> argparse.ArgumentParser:

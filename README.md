@@ -116,18 +116,24 @@ El contrato está en `contracts/distributed.v1.json`. Los ejemplos de configurac
 
 ### Revisión de calidad y aceptación científica
 
-El MCP remoto expone cuatro operaciones para revisar una versión de resultado:
+El MCP remoto expone operaciones para revisar y cerrar una versión de resultado:
 
 - `get_qc_summary`: muestra los tres estados independientes y la vigencia del segundo nivel.
 - `get_subject_qc`: devuelve métricas ART y enlaces firmados de una hora para las imágenes de cada sujeto.
 - `set_subject_qc_decision`: registra `accept`, `exclude` o `needs_review`; toda exclusión exige justificación.
 - `record_scientific_decision`: registra `accept`, `reject` o `needs_review` para el análisis completo.
+- `request_second_level_recalculation`: congela la muestra aceptada y encola solamente el segundo nivel.
+- `get_second_level_recalculation`: informa el estado y la versión del modelo grupal.
+- `generate_reproducibility_package`: genera un ZIP con informe, métodos, parámetros, literatura, decisiones y hashes.
+- `create_review_link`: crea un enlace interactivo de una hora para revisar el trabajo en `/review`.
 
 Cada decisión guarda la identidad autenticada, la fecha, `result_version` y,
 para la decisión científica, `sample_version`. El historial es append-only. Si
 una exclusión cambia la muestra, los resultados de segundo nivel existentes se
 marcan como `stale` y se bloquea la aceptación científica hasta ejecutar una
-versión calculada con la muestra revisada. El contrato está en
+versión calculada con la muestra revisada. Cada ejecución nueva genera además
+QA visual nativo de CONN para normalización, registro, segmentación, ART y
+denoising, junto con tSNR, DVARS, volúmenes retenidos y rachas de outliers. El contrato está en
 `contracts/qc_review.v1.json`.
 
 ### Asesor de literatura en el cliente
@@ -172,6 +178,11 @@ El worker se inicia con:
 ```
 
 En la desktop Windows, `scripts/run_distributed_worker.ps1` carga la configuración local y mantiene el worker consultando la cola. El script impide instancias duplicadas y reinicia el proceso si termina inesperadamente; un acceso directo en la carpeta de inicio de Windows hace que vuelva a operar después de reiniciar la PC.
+
+`scripts/install_worker_autostart.ps1` instala ese inicio automático y
+`scripts/uninstall_worker_autostart.ps1` lo elimina. El supervisor registra
+reinicios y fallos en `work/logs/worker-supervisor.log`. La herramienta MCP
+`get_system_health` muestra presencia del worker, bucket y colas de ejecución.
 
 Cada investigador conecta Codex usando la URL pública y una credencial propia:
 

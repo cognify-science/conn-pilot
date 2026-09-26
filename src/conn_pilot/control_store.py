@@ -160,6 +160,7 @@ class PostgresControlStore:
             """,
             "ALTER TABLE cp_artifacts ADD COLUMN IF NOT EXISTS subject_id TEXT",
             "ALTER TABLE cp_artifacts ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb",
+            "ALTER TABLE cp_artifacts ADD COLUMN IF NOT EXISTS second_level_run_id TEXT",
             """
             CREATE TABLE IF NOT EXISTS cp_subject_qc_reviews (
                 id TEXT PRIMARY KEY,
@@ -184,12 +185,48 @@ class PostgresControlStore:
                 decided_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS cp_second_level_runs (
+                id TEXT PRIMARY KEY,
+                job_id TEXT NOT NULL REFERENCES cp_jobs(id) ON DELETE CASCADE,
+                owner_subject TEXT NOT NULL REFERENCES cp_credentials(subject),
+                parent_result_version TEXT NOT NULL,
+                sample_version TEXT NOT NULL,
+                included_subject_ids JSONB NOT NULL,
+                review_snapshot JSONB NOT NULL,
+                state TEXT NOT NULL DEFAULT 'queued',
+                phase TEXT NOT NULL DEFAULT 'waiting_for_worker',
+                worker_id TEXT REFERENCES cp_workers(id),
+                lease_expires_at TIMESTAMPTZ,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                output_version TEXT,
+                result_summary JSONB,
+                error TEXT,
+                started_at TIMESTAMPTZ,
+                finished_at TIMESTAMPTZ,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS cp_review_sessions (
+                id TEXT PRIMARY KEY,
+                token_hash TEXT NOT NULL UNIQUE,
+                job_id TEXT NOT NULL REFERENCES cp_jobs(id) ON DELETE CASCADE,
+                owner_subject TEXT NOT NULL REFERENCES cp_credentials(subject),
+                expires_at TIMESTAMPTZ NOT NULL,
+                revoked BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
             "CREATE INDEX IF NOT EXISTS cp_jobs_queue_idx ON cp_jobs(state, created_at)",
             "CREATE INDEX IF NOT EXISTS cp_method_decisions_project_idx ON cp_method_decisions(project_id, created_at)",
             "CREATE INDEX IF NOT EXISTS cp_job_events_job_idx ON cp_job_events(job_id, id)",
             "CREATE INDEX IF NOT EXISTS cp_artifacts_job_idx ON cp_artifacts(job_id, created_at)",
             "CREATE INDEX IF NOT EXISTS cp_subject_qc_reviews_job_idx ON cp_subject_qc_reviews(job_id, result_version, subject_id, decided_at)",
             "CREATE INDEX IF NOT EXISTS cp_analysis_reviews_job_idx ON cp_analysis_reviews(job_id, result_version, sample_version, decided_at)",
+            "CREATE INDEX IF NOT EXISTS cp_second_level_runs_queue_idx ON cp_second_level_runs(state, created_at)",
+            "CREATE INDEX IF NOT EXISTS cp_second_level_runs_job_idx ON cp_second_level_runs(job_id, parent_result_version, sample_version, created_at)",
         ]
         with self._connect() as connection:
             with connection.cursor() as cursor:
@@ -284,6 +321,69 @@ class PostgresControlStore:
                 """
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def get_system_health(self) -> dict[str, Any]:
+        with self._connect() as connection:
+            workers = connection.execute(
+                """
+                SELECT id, label, capabilities, last_seen_at::text AS last_seen_at,
+                       (last_seen_at >= NOW() - INTERVAL '2 minutes') AS online
+                FROM cp_workers ORDER BY id
+                """
+            ).fetchall()
+            jobs = connection.execute(
+                "SELECT state, COUNT(*) AS count FROM cp_jobs GROUP BY state"
+            ).fetchall()
+            second_level = connection.execute(
+                "SELECT state, COUNT(*) AS count FROM cp_second_level_runs GROUP BY state"
+            ).fetchall()
+            datasets = connection.execute(
+                "SELECT status, COUNT(*) AS count FROM cp_datasets GROUP BY status"
+            ).fetchall()
+        return {
+            "workers": [dict(row) for row in workers],
+            "job_counts": {str(row["state"]): int(row["count"]) for row in jobs},
+            "second_level_counts": {
+                str(row["state"]): int(row["count"]) for row in second_level
+            },
+            "dataset_counts": {str(row["status"]): int(row["count"]) for row in datasets},
+        }
+
+    def create_review_session(
+        self, job_id: str, owner_subject: str, expires_seconds: int = 3600
+    ) -> dict[str, Any]:
+        raw_token = secrets.token_urlsafe(32)
+        session_id = uuid.uuid4().hex
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                INSERT INTO cp_review_sessions(id, token_hash, job_id, owner_subject, expires_at)
+                SELECT %s, %s, j.id, j.owner_subject,
+                       NOW() + (%s * INTERVAL '1 second')
+                FROM cp_jobs j
+                WHERE j.id=%s AND j.owner_subject=%s AND j.state='succeeded'
+                RETURNING id, job_id, owner_subject, expires_at::text AS expires_at,
+                          created_at::text AS created_at
+                """,
+                (session_id, token_digest(raw_token), expires_seconds, job_id, owner_subject),
+            ).fetchone()
+        if not row:
+            raise ValueError("Unknown successful job")
+        value = dict(row)
+        value["token"] = raw_token
+        return value
+
+    def resolve_review_session(self, token: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, job_id, owner_subject, expires_at::text AS expires_at
+                FROM cp_review_sessions
+                WHERE token_hash=%s AND revoked=FALSE AND expires_at > NOW()
+                """,
+                (token_digest(token),),
+            ).fetchone()
+        return dict(row) if row else None
 
     def get_dataset(self, dataset_id: str) -> dict[str, Any] | None:
         with self._connect() as connection:
@@ -551,7 +651,7 @@ class PostgresControlStore:
             rows = connection.execute(
                 """
                 SELECT a.id, a.kind, a.name, a.object_key, a.bytes, a.sha256, a.content_type,
-                       a.subject_id, a.metadata,
+                       a.subject_id, a.metadata, a.second_level_run_id,
                        a.created_at::text AS created_at
                 FROM cp_artifacts a JOIN cp_jobs j ON j.id=a.job_id
                 WHERE a.job_id=%s AND j.owner_subject=%s ORDER BY a.created_at, a.name
@@ -559,6 +659,202 @@ class PostgresControlStore:
                 (job_id, subject),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def create_second_level_run(
+        self,
+        job_id: str,
+        owner_subject: str,
+        parent_result_version: str,
+        sample_version: str,
+        included_subject_ids: list[str],
+        review_snapshot: dict[str, Any],
+    ) -> dict[str, Any]:
+        run_id = uuid.uuid4().hex
+        with self._connect() as connection:
+            with connection.transaction():
+                job = connection.execute(
+                    """
+                    SELECT id, result_version FROM cp_jobs
+                    WHERE id=%s AND owner_subject=%s AND state='succeeded' FOR UPDATE
+                    """,
+                    (job_id, owner_subject),
+                ).fetchone()
+                if not job or job["result_version"] != parent_result_version:
+                    raise ValueError("The result version is unknown or no longer current")
+                existing = connection.execute(
+                    """
+                    SELECT id, job_id, parent_result_version, sample_version, included_subject_ids,
+                           state, phase, attempts, output_version, result_summary, error,
+                           created_at::text AS created_at, updated_at::text AS updated_at
+                    FROM cp_second_level_runs
+                    WHERE job_id=%s AND parent_result_version=%s AND sample_version=%s
+                      AND state IN ('queued','running','succeeded')
+                    ORDER BY created_at DESC LIMIT 1
+                    """,
+                    (job_id, parent_result_version, sample_version),
+                ).fetchone()
+                if existing:
+                    return dict(existing)
+                row = connection.execute(
+                    """
+                    INSERT INTO cp_second_level_runs(
+                        id, job_id, owner_subject, parent_result_version, sample_version,
+                        included_subject_ids, review_snapshot
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    RETURNING id, job_id, parent_result_version, sample_version, included_subject_ids,
+                              state, phase, attempts, output_version, result_summary, error,
+                              created_at::text AS created_at, updated_at::text AS updated_at
+                    """,
+                    (
+                        run_id, job_id, owner_subject, parent_result_version, sample_version,
+                        Jsonb(included_subject_ids), Jsonb(review_snapshot),
+                    ),
+                ).fetchone()
+                connection.execute(
+                    """
+                    INSERT INTO cp_job_events(job_id, kind, message, details)
+                    VALUES (%s, 'second_level_queued', 'Second-level recalculation queued', %s)
+                    """,
+                    (job_id, Jsonb({"second_level_run_id": run_id, "sample_version": sample_version})),
+                )
+        return dict(row)
+
+    def list_second_level_runs(
+        self, job_id: str, owner_subject: str, parent_result_version: str
+    ) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT r.id, r.job_id, r.parent_result_version, r.sample_version,
+                       r.included_subject_ids, r.state, r.phase, r.attempts, r.output_version,
+                       r.result_summary, r.error, r.created_at::text AS created_at,
+                       r.updated_at::text AS updated_at, r.finished_at::text AS finished_at
+                FROM cp_second_level_runs r JOIN cp_jobs j ON j.id=r.job_id
+                WHERE r.job_id=%s AND j.owner_subject=%s AND r.parent_result_version=%s
+                ORDER BY r.created_at
+                """,
+                (job_id, owner_subject, parent_result_version),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_second_level_run(
+        self, run_id: str, owner_subject: str | None = None
+    ) -> dict[str, Any] | None:
+        query = """
+            SELECT r.id, r.job_id, r.owner_subject, r.parent_result_version, r.sample_version,
+                   r.included_subject_ids, r.review_snapshot, r.state, r.phase, r.worker_id,
+                   r.attempts, r.output_version, r.result_summary, r.error,
+                   r.created_at::text AS created_at, r.updated_at::text AS updated_at,
+                   r.finished_at::text AS finished_at
+            FROM cp_second_level_runs r WHERE r.id=%s
+        """
+        args: tuple[Any, ...] = (run_id,)
+        if owner_subject is not None:
+            query += " AND r.owner_subject=%s"
+            args = (run_id, owner_subject)
+        with self._connect() as connection:
+            row = connection.execute(query, args).fetchone()
+        return dict(row) if row else None
+
+    def claim_second_level_run(
+        self, worker_id: str, dataset_ids: list[str], lease_seconds: int
+    ) -> dict[str, Any] | None:
+        if not dataset_ids:
+            return None
+        with self._connect() as connection:
+            with connection.transaction():
+                selected = connection.execute(
+                    """
+                    SELECT r.id FROM cp_second_level_runs r
+                    JOIN cp_jobs j ON j.id=r.job_id
+                    WHERE (r.state='queued' OR (r.state='running' AND r.lease_expires_at < NOW()))
+                      AND j.dataset_id = ANY(%s)
+                    ORDER BY r.created_at FOR UPDATE SKIP LOCKED LIMIT 1
+                    """,
+                    (dataset_ids,),
+                ).fetchone()
+                if not selected:
+                    return None
+                row = connection.execute(
+                    """
+                    UPDATE cp_second_level_runs SET state='running', phase='claimed', worker_id=%s,
+                        lease_expires_at=NOW() + (%s * INTERVAL '1 second'), attempts=attempts+1,
+                        started_at=COALESCE(started_at,NOW()), updated_at=NOW(), error=NULL
+                    WHERE id=%s
+                    RETURNING id, job_id, parent_result_version, sample_version,
+                              included_subject_ids, review_snapshot, state, phase, attempts
+                    """,
+                    (worker_id, lease_seconds, selected["id"]),
+                ).fetchone()
+                job = connection.execute(
+                    """
+                    SELECT j.id, j.dataset_id, j.result_summary, p.spec AS project_spec
+                    FROM cp_jobs j JOIN cp_projects p ON p.id=j.project_id WHERE j.id=%s
+                    """,
+                    (row["job_id"],),
+                ).fetchone()
+        value = dict(row)
+        value["source_job"] = dict(job)
+        return value
+
+    def heartbeat_second_level_run(
+        self, run_id: str, worker_id: str, phase: str, lease_seconds: int
+    ) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                UPDATE cp_second_level_runs SET phase=%s,
+                    lease_expires_at=NOW() + (%s * INTERVAL '1 second'), updated_at=NOW()
+                WHERE id=%s AND worker_id=%s AND state='running' RETURNING id
+                """,
+                (phase, lease_seconds, run_id, worker_id),
+            ).fetchone()
+        return bool(row)
+
+    def complete_second_level_run(
+        self, run_id: str, worker_id: str, state: str,
+        summary: dict[str, Any], error: str | None,
+    ) -> bool:
+        if state not in {"succeeded", "failed"}:
+            raise ValueError("Completion state must be succeeded or failed")
+        with self._connect() as connection:
+            with connection.transaction():
+                artifacts = connection.execute(
+                    """
+                    SELECT kind, name, sha256 FROM cp_artifacts
+                    WHERE second_level_run_id=%s ORDER BY kind, name, sha256
+                    """,
+                    (run_id,),
+                ).fetchall()
+                output_version = None
+                if state == "succeeded":
+                    output_version = "sha256:" + hashlib.sha256(json.dumps(
+                        {"second_level_run_id": run_id, "summary": summary,
+                         "artifacts": [dict(item) for item in artifacts]},
+                        sort_keys=True, separators=(",", ":"),
+                    ).encode("utf-8")).hexdigest()
+                row = connection.execute(
+                    """
+                    UPDATE cp_second_level_runs SET state=%s, phase=%s, output_version=%s,
+                        result_summary=%s, error=%s, lease_expires_at=NULL,
+                        finished_at=NOW(), updated_at=NOW()
+                    WHERE id=%s AND worker_id=%s AND state='running'
+                    RETURNING id, job_id
+                    """,
+                    (state, state, output_version, Jsonb(summary), error, run_id, worker_id),
+                ).fetchone()
+                if row:
+                    connection.execute(
+                        """
+                        INSERT INTO cp_job_events(job_id, kind, message, details)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (row["job_id"], f"second_level_{state}",
+                         f"Second-level recalculation {state}",
+                         Jsonb({"second_level_run_id": run_id,
+                                "output_version": output_version, "error": error})),
+                    )
+        return bool(row)
 
     def claim_job(self, worker_id: str, dataset_ids: list[str], lease_seconds: int) -> dict[str, Any] | None:
         if not dataset_ids:
@@ -679,24 +975,34 @@ class PostgresControlStore:
         content_type: str,
         subject_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        second_level_run_id: str | None = None,
     ) -> dict[str, Any]:
         artifact_id = uuid.uuid4().hex
         with self._connect() as connection:
-            job = connection.execute(
-                "SELECT id FROM cp_jobs WHERE id=%s AND worker_id=%s",
-                (job_id, worker_id),
-            ).fetchone()
+            if second_level_run_id:
+                job = connection.execute(
+                    """
+                    SELECT job_id AS id FROM cp_second_level_runs
+                    WHERE id=%s AND job_id=%s AND worker_id=%s AND state='running'
+                    """,
+                    (second_level_run_id, job_id, worker_id),
+                ).fetchone()
+            else:
+                job = connection.execute(
+                    "SELECT id FROM cp_jobs WHERE id=%s AND worker_id=%s",
+                    (job_id, worker_id),
+                ).fetchone()
             if not job:
                 raise ValueError("Worker does not own this job")
             row = connection.execute(
                 """
                 INSERT INTO cp_artifacts(
                     id, job_id, kind, name, object_key, bytes, sha256, content_type,
-                    subject_id, metadata
+                    subject_id, metadata, second_level_run_id
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id, kind, name, object_key, bytes, sha256, content_type,
-                          subject_id, metadata,
+                          subject_id, metadata, second_level_run_id,
                           created_at::text AS created_at
                 """,
                 (
@@ -710,7 +1016,43 @@ class PostgresControlStore:
                     content_type,
                     subject_id,
                     Jsonb(metadata or {}),
+                    second_level_run_id,
                 ),
+            ).fetchone()
+        return dict(row)
+
+    def add_generated_artifact(
+        self,
+        job_id: str,
+        owner_subject: str,
+        *,
+        kind: str,
+        name: str,
+        object_key: str,
+        bytes_count: int,
+        sha256: str,
+        content_type: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        artifact_id = uuid.uuid4().hex
+        with self._connect() as connection:
+            job = connection.execute(
+                "SELECT id FROM cp_jobs WHERE id=%s AND owner_subject=%s AND state='succeeded'",
+                (job_id, owner_subject),
+            ).fetchone()
+            if not job:
+                raise ValueError("Unknown successful job")
+            row = connection.execute(
+                """
+                INSERT INTO cp_artifacts(
+                    id, job_id, kind, name, object_key, bytes, sha256, content_type, metadata
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                RETURNING id, kind, name, object_key, bytes, sha256, content_type,
+                          subject_id, metadata, second_level_run_id,
+                          created_at::text AS created_at
+                """,
+                (artifact_id, job_id, kind, name, object_key, bytes_count, sha256,
+                 content_type, Jsonb(metadata or {})),
             ).fetchone()
         return dict(row)
 

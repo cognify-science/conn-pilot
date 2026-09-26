@@ -64,6 +64,7 @@ class FakeStore:
         self.artifacts: list[dict[str, Any]] = []
         self.subject_qc_decisions: list[dict[str, Any]] = []
         self.analysis_decisions: list[dict[str, Any]] = []
+        self.second_level_runs: list[dict[str, Any]] = []
 
     def verify_credential(self, token: str) -> dict[str, Any] | None:
         return {"subject": "owner", "role": "admin"} if token == "x" * 48 else None
@@ -86,6 +87,20 @@ class FakeStore:
 
     def list_datasets(self) -> list[dict[str, Any]]:
         return list(self.datasets.values())
+
+    def get_system_health(self) -> dict[str, Any]:
+        return {"workers": [{"id": "worker-1", "online": True}], "job_counts": {},
+                "second_level_counts": {}, "dataset_counts": {"ready": 1}}
+
+    def create_review_session(
+        self, job_id: str, owner_subject: str, expires_seconds: int = 3600
+    ) -> dict[str, Any]:
+        return {"id": "review-1", "job_id": job_id, "owner_subject": owner_subject,
+                "expires_at": "2026-09-26T13:00:00Z", "token": "review-token"}
+
+    def resolve_review_session(self, token: str) -> dict[str, Any] | None:
+        return ({"id": "review-1", "job_id": "job-1", "owner_subject": "owner"}
+                if token == "review-token" else None)
 
     def get_dataset(self, dataset_id: str) -> dict[str, Any] | None:
         return self.datasets.get(dataset_id)
@@ -164,6 +179,60 @@ class FakeStore:
         value = {"id": f"artifact-{len(self.artifacts) + 1}", "job_id": job_id, **kwargs}
         self.artifacts.append(value)
         return value
+
+    def add_generated_artifact(
+        self, job_id: str, owner_subject: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        value = {"id": f"artifact-{len(self.artifacts) + 1}", "job_id": job_id, **kwargs}
+        self.artifacts.append(value)
+        return value
+
+    def create_second_level_run(
+        self, job_id: str, owner_subject: str, parent_result_version: str,
+        sample_version: str, included_subject_ids: list[str], review_snapshot: dict[str, Any]
+    ) -> dict[str, Any]:
+        existing = next((item for item in self.second_level_runs
+                         if item["job_id"] == job_id
+                         and item["sample_version"] == sample_version
+                         and item["state"] in {"queued", "running", "succeeded"}), None)
+        if existing:
+            return existing
+        value = {
+            "id": f"second-level-{len(self.second_level_runs) + 1}", "job_id": job_id,
+            "parent_result_version": parent_result_version, "sample_version": sample_version,
+            "included_subject_ids": included_subject_ids, "state": "queued",
+            "phase": "waiting_for_worker", "attempts": 0, "output_version": None,
+            "result_summary": None, "error": None,
+        }
+        self.second_level_runs.append(value)
+        return value
+
+    def list_second_level_runs(
+        self, job_id: str, owner_subject: str, parent_result_version: str
+    ) -> list[dict[str, Any]]:
+        return [item for item in self.second_level_runs if item["job_id"] == job_id
+                and item["parent_result_version"] == parent_result_version]
+
+    def get_second_level_run(
+        self, run_id: str, owner_subject: str | None = None
+    ) -> dict[str, Any] | None:
+        return next((item for item in self.second_level_runs if item["id"] == run_id), None)
+
+    def claim_second_level_run(
+        self, worker_id: str, dataset_ids: list[str], lease_seconds: int
+    ) -> dict[str, Any] | None:
+        return None
+
+    def heartbeat_second_level_run(
+        self, run_id: str, worker_id: str, phase: str, lease_seconds: int
+    ) -> bool:
+        return True
+
+    def complete_second_level_run(
+        self, run_id: str, worker_id: str, state: str,
+        summary: dict[str, Any], error: str | None
+    ) -> bool:
+        return True
 
     def record_subject_qc_decision(
         self,
@@ -470,6 +539,8 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
             {
                 "list_pipelines",
                 "list_datasets",
+                "get_system_health",
+                "create_review_link",
                 "inspect_dataset",
                 "create_project",
                 "validate_project",
@@ -483,6 +554,9 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                 "get_subject_qc",
                 "set_subject_qc_decision",
                 "record_scientific_decision",
+                "request_second_level_recalculation",
+                "get_second_level_recalculation",
+                "generate_reproducibility_package",
                 "get_result_download_url",
                 "list_guidance_topics",
                 "get_parameter_guidance",

@@ -3,7 +3,8 @@
   "identifiers": {
     "dataset_id": "Opaque identifier mapped to a private path only by the local worker",
     "project_id": "Remote path-free scientific project specification",
-    "job_id": "Persistent queued execution identifier"
+    "job_id": "Persistent queued execution identifier",
+    "second_level_run_id": "Versioned group recalculation bound to a parent result and sample version"
   },
   "job_states": ["queued", "running", "succeeded", "failed", "cancelled"],
   "job_phases": [
@@ -40,11 +41,13 @@
     "exclusion_justification_required": true,
     "audit_identity": "Authenticated MCP subject",
     "result_version_required": true,
-    "sample_change_policy": "Block stale second-level results until recalculated",
+    "sample_change_policy": "Block stale second-level results until a worker recalculates the accepted sample",
     "separate_states": [
       "technical_completeness",
       "subject_quality",
       "scientific_acceptance"
-    ]
+    ],
+    "portal": "An authenticated MCP user may mint a one-hour capability link scoped to one successful job",
+    "reproducibility_package": "Server-generated ZIP with HTML, JSON, methods, parameters, evidence, decisions and artifact hashes"
   }
 }

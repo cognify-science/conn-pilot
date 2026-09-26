@@ -29,7 +29,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 from pydantic import AnyHttpUrl
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 
 from .catalog import Catalog
 from .control_store import PostgresControlStore
@@ -37,6 +37,8 @@ from .io import nested_get
 from .literature import LiteratureEvidenceService
 from .parameter_resolver import ParameterResolver
 from .project import validate_project as validate_project_definition
+from .reporting import build_reproducibility_package
+from .portal import review_portal_html
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +53,11 @@ class Store(Protocol):
         self, subject: str, *, provider: str, email: str | None = None
     ) -> dict[str, Any] | None: ...
     def list_datasets(self) -> list[dict[str, Any]]: ...
+    def get_system_health(self) -> dict[str, Any]: ...
+    def create_review_session(
+        self, job_id: str, owner_subject: str, expires_seconds: int = 3600
+    ) -> dict[str, Any]: ...
+    def resolve_review_session(self, token: str) -> dict[str, Any] | None: ...
     def get_dataset(self, dataset_id: str) -> dict[str, Any] | None: ...
     def create_project(
         self, owner_subject: str, dataset_id: str, pipeline_id: str, pipeline_version: str, spec: dict[str, Any]
@@ -69,6 +76,29 @@ class Store(Protocol):
         self, job_id: str, worker_id: str, state: str, summary: dict[str, Any], error: str | None
     ) -> bool: ...
     def add_artifact(self, job_id: str, worker_id: str, **kwargs: Any) -> dict[str, Any]: ...
+    def add_generated_artifact(
+        self, job_id: str, owner_subject: str, **kwargs: Any
+    ) -> dict[str, Any]: ...
+    def create_second_level_run(
+        self, job_id: str, owner_subject: str, parent_result_version: str,
+        sample_version: str, included_subject_ids: list[str], review_snapshot: dict[str, Any]
+    ) -> dict[str, Any]: ...
+    def list_second_level_runs(
+        self, job_id: str, owner_subject: str, parent_result_version: str
+    ) -> list[dict[str, Any]]: ...
+    def get_second_level_run(
+        self, run_id: str, owner_subject: str | None = None
+    ) -> dict[str, Any] | None: ...
+    def claim_second_level_run(
+        self, worker_id: str, dataset_ids: list[str], lease_seconds: int
+    ) -> dict[str, Any] | None: ...
+    def heartbeat_second_level_run(
+        self, run_id: str, worker_id: str, phase: str, lease_seconds: int
+    ) -> bool: ...
+    def complete_second_level_run(
+        self, run_id: str, worker_id: str, state: str,
+        summary: dict[str, Any], error: str | None
+    ) -> bool: ...
     def record_subject_qc_decision(
         self, job_id: str, owner_subject: str, result_version: str, subject_id: str,
         decision: str, justification: str | None
@@ -255,6 +285,16 @@ class ArtifactStorage:
             "get_object", Params={"Bucket": self.bucket, "Key": object_key}, ExpiresIn=3600
         )
 
+    def put_bytes(self, job_id: str, name: str, content_type: str, content: bytes) -> str:
+        if not self.client:
+            raise ValueError("Artifact bucket is not configured")
+        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(name).name).strip("._") or "artifact"
+        object_key = f"jobs/{job_id}/{uuid.uuid4().hex}-{safe_name}"
+        self.client.put_object(
+            Bucket=self.bucket, Key=object_key, Body=content, ContentType=content_type
+        )
+        return object_key
+
 
 class ControlPlaneService:
     def __init__(
@@ -292,6 +332,26 @@ class ControlPlaneService:
     def list_datasets(self) -> dict[str, Any]:
         datasets = self.store.list_datasets()
         return _response("list_datasets", {"datasets": datasets, "count": len(datasets)})
+
+    def get_system_health(self, storage_available: bool) -> dict[str, Any]:
+        health = self.store.get_system_health()
+        health["artifact_storage_available"] = storage_available
+        health["ready_for_execution"] = bool(
+            storage_available and any(item.get("online") for item in health["workers"])
+        )
+        return _response("get_system_health", health)
+
+    def create_review_link(
+        self, subject: str, job_id: str, public_base_url: str
+    ) -> dict[str, Any]:
+        self._job(job_id, subject)
+        session = self.store.create_review_session(job_id, subject)
+        token = session.pop("token")
+        return _response(
+            "create_review_link",
+            {"job_id": job_id, "url": f"{public_base_url.rstrip('/')}/review/{token}",
+             "expires_at": session["expires_at"]},
+        )
 
     def inspect_dataset(self, dataset_id: str) -> dict[str, Any]:
         dataset = self._dataset(dataset_id)
@@ -579,6 +639,86 @@ class ControlPlaneService:
             {"decision": recorded, "review": self._review_state(subject, job)},
         )
 
+    def request_second_level_recalculation(
+        self,
+        subject: str,
+        job_id: str,
+        result_version: str,
+        sample_version: str,
+    ) -> dict[str, Any]:
+        job = self._job(job_id, subject)
+        if job.get("result_version") != result_version:
+            raise ValueError("The supplied result_version is not current")
+        review = self._review_state(subject, job)
+        if review["sample"]["version"] != sample_version:
+            raise ValueError("The supplied sample_version is not current")
+        if not review["technical_completeness"]["passed"]:
+            raise ValueError("Technical completeness must pass before second-level recalculation")
+        unresolved = review["subject_quality"]["unresolved_subject_ids"]
+        if unresolved:
+            raise ValueError("Subject QC must be complete before second-level recalculation")
+        included = review["sample"]["included_subject_ids"]
+        if len(included) < 2:
+            raise ValueError("At least two accepted subjects are required for this group analysis")
+        project = self._project(job["project_id"], subject)
+        if (project.get("spec") or {}).get("design", {}).get("type") != "one_sample":
+            raise ValueError("Versioned recalculation currently supports one_sample designs")
+        run = self.store.create_second_level_run(
+            job_id, subject, result_version, sample_version, included, review
+        )
+        return _response(
+            "request_second_level_recalculation",
+            {"second_level_run": run, "review": self._review_state(subject, job)},
+        )
+
+    def get_second_level_recalculation(
+        self, subject: str, run_id: str
+    ) -> dict[str, Any]:
+        run = self.store.get_second_level_run(run_id, subject)
+        if not run:
+            raise ValueError("Unknown second-level recalculation")
+        return _response(
+            "get_second_level_recalculation",
+            {"second_level_run": run, "terminal": run["state"] in {"succeeded", "failed", "cancelled"}},
+            ok=run["state"] != "failed",
+            errors=[run["error"]] if run.get("error") else [],
+        )
+
+    def generate_reproducibility_package(
+        self, subject: str, job_id: str, result_version: str, sample_version: str,
+        storage: ArtifactStorage,
+    ) -> dict[str, Any]:
+        job = self._job(job_id, subject)
+        if job.get("result_version") != result_version:
+            raise ValueError("The supplied result_version is not current")
+        review = self._review_state(subject, job)
+        if review["sample"]["version"] != sample_version:
+            raise ValueError("The supplied sample_version is not current")
+        if not review["subject_quality"]["complete"]:
+            raise ValueError("Subject QC must be complete before packaging")
+        if review["second_level"]["blocked"]:
+            raise ValueError("A current second-level result is required before packaging")
+        project = self._project(job["project_id"], subject)
+        artifacts = self.store.list_artifacts(job_id, subject)
+        decisions = self.store.list_method_decisions(project["id"], subject)
+        content, manifest = build_reproducibility_package(
+            job=job, project=project, review=review, artifacts=artifacts,
+            method_decisions=decisions,
+        )
+        digest = hashlib.sha256(content).hexdigest()
+        name = f"conn-pilot-{job_id[:8]}-{sample_version.removeprefix('sha256:')[:8]}.zip"
+        object_key = storage.put_bytes(job_id, name, "application/zip", content)
+        artifact = self.store.add_generated_artifact(
+            job_id, subject, kind="reproducibility_package", name=name,
+            object_key=object_key, bytes_count=len(content), sha256=digest,
+            content_type="application/zip", metadata=manifest,
+        )
+        return _response(
+            "generate_reproducibility_package",
+            {"artifact": artifact, "manifest": manifest,
+             "download_url": storage.download_url(object_key), "expires_in": 3600},
+        )
+
     def _review_state(self, subject: str, job: dict[str, Any]) -> dict[str, Any]:
         result_version = job.get("result_version")
         summary = job.get("result_summary") or {}
@@ -632,9 +772,27 @@ class ControlPlaneService:
             for item in subjects
             if not item.get("decision") or item["decision"].get("decision") == "needs_review"
         ]
-        second_level_available = any(item.get("kind") == "second_level_maps" for item in artifacts)
+        second_level_available = any(
+            item.get("kind") == "second_level_maps" and not item.get("second_level_run_id")
+            for item in artifacts
+        )
         sample_changed = included_ids != original_ids
-        second_level_current = second_level_available and not sample_changed
+        recalculations = (
+            self.store.list_second_level_runs(job["id"], subject, result_version)
+            if result_version else []
+        )
+        active_recalculation = next(
+            (item for item in reversed(recalculations)
+             if item.get("sample_version") == sample_version and item.get("state") == "succeeded"),
+            None,
+        )
+        pending_recalculation = next(
+            (item for item in reversed(recalculations)
+             if item.get("sample_version") == sample_version
+             and item.get("state") in {"queued", "running"}),
+            None,
+        )
+        second_level_current = bool(active_recalculation) or (second_level_available and not sample_changed)
         technical = qc.get("technical_completeness", {})
         technical_passed = bool(technical.get("passed"))
         eligible = bool(
@@ -681,10 +839,15 @@ class ControlPlaneService:
             },
             "second_level": {
                 "status": (
-                    "stale" if sample_changed else "current" if second_level_current else "unavailable"
+                    "current" if second_level_current else
+                    "recalculating" if pending_recalculation else
+                    "stale" if sample_changed else "unavailable"
                 ),
                 "blocked": not second_level_current,
                 "recalculation_required": sample_changed,
+                "active_recalculation": active_recalculation,
+                "pending_recalculation": pending_recalculation,
+                "versions": recalculations,
                 "reason": (
                     "The effective sample differs from the sample used to compute the second level."
                     if sample_changed
@@ -1106,6 +1269,21 @@ def build_control_plane_server(
         return service.list_datasets()
 
     @server.tool(annotations=read_only)
+    def get_system_health() -> dict[str, Any]:
+        """Show worker availability, storage readiness and execution queue counts."""
+        return service.get_system_health(storage.available)
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=False, destructive_hint=False,
+            idempotent_hint=False, open_world_hint=False,
+        )
+    )
+    def create_review_link(job_id: str) -> dict[str, Any]:
+        """Create a one-hour interactive review portal link scoped to one successful job."""
+        return service.create_review_link(subject(), job_id, settings.public_base_url)
+
+    @server.tool(annotations=read_only)
     def inspect_dataset(dataset_id: str) -> dict[str, Any]:
         """Read the worker's cached dataset inspection without exposing local filesystem paths."""
         return service.inspect_dataset(dataset_id)
@@ -1215,6 +1393,45 @@ def build_control_plane_server(
             sample_version,
             decision,
             rationale,
+        )
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=True,
+            open_world_hint=False,
+        )
+    )
+    def request_second_level_recalculation(
+        job_id: str,
+        result_version: str,
+        sample_version: str,
+    ) -> dict[str, Any]:
+        """Queue a versioned group analysis for the currently accepted one-sample cohort."""
+        return service.request_second_level_recalculation(
+            subject(), job_id, result_version, sample_version
+        )
+
+    @server.tool(annotations=read_only)
+    def get_second_level_recalculation(run_id: str) -> dict[str, Any]:
+        """Read state, version and output summary for a queued group recalculation."""
+        return service.get_second_level_recalculation(subject(), run_id)
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=False,
+        )
+    )
+    def generate_reproducibility_package(
+        job_id: str, result_version: str, sample_version: str
+    ) -> dict[str, Any]:
+        """Create a downloadable ZIP with report, methods, parameters, QC decisions and provenance."""
+        return service.generate_reproducibility_package(
+            subject(), job_id, result_version, sample_version, storage
         )
 
     @server.tool(annotations=read_only)
@@ -1404,6 +1621,43 @@ def build_control_plane_server(
         job = store.claim_job(worker_id, dataset_ids, settings.lease_seconds)
         return JSONResponse({"ok": True, "job": job})
 
+    @server.custom_route("/worker/v1/second-level/claim", methods=["POST"])
+    async def second_level_claim(request: Request) -> JSONResponse:
+        body, error = await worker_json(request)
+        if error:
+            return error
+        assert body is not None
+        run = store.claim_second_level_run(
+            str(body.get("worker_id", "")),
+            [str(value) for value in body.get("dataset_ids", [])],
+            settings.lease_seconds,
+        )
+        return JSONResponse({"ok": True, "second_level_run": run})
+
+    @server.custom_route("/worker/v1/second-level/{run_id:str}/heartbeat", methods=["POST"])
+    async def second_level_heartbeat(request: Request) -> JSONResponse:
+        body, error = await worker_json(request)
+        if error:
+            return error
+        assert body is not None
+        updated = store.heartbeat_second_level_run(
+            request.path_params["run_id"], str(body.get("worker_id", "")),
+            str(body.get("phase", "running")), settings.lease_seconds,
+        )
+        return JSONResponse({"ok": updated}, status_code=200 if updated else 409)
+
+    @server.custom_route("/worker/v1/second-level/{run_id:str}/complete", methods=["POST"])
+    async def second_level_complete(request: Request) -> JSONResponse:
+        body, error = await worker_json(request)
+        if error:
+            return error
+        assert body is not None
+        updated = store.complete_second_level_run(
+            request.path_params["run_id"], str(body.get("worker_id", "")),
+            str(body.get("state", "")), body.get("summary", {}), body.get("error"),
+        )
+        return JSONResponse({"ok": updated}, status_code=200 if updated else 409)
+
     @server.custom_route("/worker/v1/jobs/{job_id:str}/heartbeat", methods=["POST"])
     async def job_heartbeat(request: Request) -> JSONResponse:
         body, error = await worker_json(request)
@@ -1465,10 +1719,124 @@ def build_control_plane_server(
                 content_type=str(body.get("content_type", "application/octet-stream")),
                 subject_id=(str(body["subject_id"]) if body.get("subject_id") else None),
                 metadata=body.get("metadata", {}),
+                second_level_run_id=(
+                    str(body["second_level_run_id"]) if body.get("second_level_run_id") else None
+                ),
             )
         except (KeyError, TypeError, ValueError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         return JSONResponse({"ok": True, "artifact": artifact})
+
+    def portal_session(request: Request) -> dict[str, Any] | None:
+        return store.resolve_review_session(str(request.path_params.get("token", "")))
+
+    async def portal_body(request: Request) -> tuple[dict[str, Any] | None, JSONResponse | None]:
+        try:
+            value = await request.json()
+        except (json.JSONDecodeError, ValueError):
+            return None, JSONResponse({"error": "invalid_json"}, status_code=400)
+        return (value, None) if isinstance(value, dict) else (
+            None, JSONResponse({"error": "body_must_be_object"}, status_code=400)
+        )
+
+    @server.custom_route("/review/{token:str}", methods=["GET"])
+    async def review_portal(request: Request) -> HTMLResponse:
+        session = portal_session(request)
+        if not session:
+            return HTMLResponse("Review link is invalid or expired.", status_code=404)
+        return HTMLResponse(
+            review_portal_html(str(request.path_params["token"])),
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        )
+
+    @server.custom_route("/review-api/{token:str}", methods=["GET"])
+    async def review_api(request: Request) -> JSONResponse:
+        session = portal_session(request)
+        if not session:
+            return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
+        job_id, owner = str(session["job_id"]), str(session["owner_subject"])
+        response = service.get_qc_summary(owner, job_id)
+        evidence = service.get_subject_qc_evidence(owner, job_id)
+        by_id = {item["subject_id"]: item for item in evidence["data"]["subjects"]}
+        for item in response["data"]["review"]["subject_quality"]["subjects"]:
+            item["art_images"] = by_id.get(item["subject_id"], {}).get("art_images", [])
+            for artifact in item["art_images"]:
+                artifact["download_url"] = storage.download_url(artifact["object_key"])
+        return JSONResponse(response, headers={"Cache-Control": "no-store"})
+
+    @server.custom_route("/review-api/{token:str}/decision", methods=["POST"])
+    async def review_decision(request: Request) -> JSONResponse:
+        session = portal_session(request)
+        if not session:
+            return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
+        body, error = await portal_body(request)
+        if error:
+            return error
+        assert body is not None
+        try:
+            response = service.set_subject_qc_decision(
+                str(session["owner_subject"]), str(session["job_id"]),
+                str(body.get("result_version", "")), str(body.get("subject_id", "")),
+                str(body.get("decision", "")), body.get("justification"),
+            )
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(response)
+
+    @server.custom_route("/review-api/{token:str}/recalculate", methods=["POST"])
+    async def review_recalculate(request: Request) -> JSONResponse:
+        session = portal_session(request)
+        if not session:
+            return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
+        body, error = await portal_body(request)
+        if error:
+            return error
+        assert body is not None
+        try:
+            response = service.request_second_level_recalculation(
+                str(session["owner_subject"]), str(session["job_id"]),
+                str(body.get("result_version", "")), str(body.get("sample_version", "")),
+            )
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(response)
+
+    @server.custom_route("/review-api/{token:str}/scientific", methods=["POST"])
+    async def review_scientific(request: Request) -> JSONResponse:
+        session = portal_session(request)
+        if not session:
+            return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
+        body, error = await portal_body(request)
+        if error:
+            return error
+        assert body is not None
+        try:
+            response = service.record_scientific_decision(
+                str(session["owner_subject"]), str(session["job_id"]),
+                str(body.get("result_version", "")), str(body.get("sample_version", "")),
+                str(body.get("decision", "")), str(body.get("rationale", "")),
+            )
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(response)
+
+    @server.custom_route("/review-api/{token:str}/package", methods=["POST"])
+    async def review_package(request: Request) -> JSONResponse:
+        session = portal_session(request)
+        if not session:
+            return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
+        body, error = await portal_body(request)
+        if error:
+            return error
+        assert body is not None
+        try:
+            response = service.generate_reproducibility_package(
+                str(session["owner_subject"]), str(session["job_id"]),
+                str(body.get("result_version", "")), str(body.get("sample_version", "")), storage,
+            )
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(response)
 
     return server
 

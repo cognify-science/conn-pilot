@@ -14,6 +14,8 @@ def collect_artifacts(project: dict[str, Any], run_dir: Path) -> dict[str, Any]:
             f"{project_name}/results/qa/**/*.jpg",
             f"{project_name}/results/qa/**/*.png",
             "inputs/**/art_screenshot*.jpg",
+            "qc_extended/**/*.jpg",
+            "qc_extended/**/*.png",
         ),
         "first_level_maps": (
             f"{project_name}/results/firstlevel/**/*.nii",
