@@ -1,0 +1,40 @@
+{
+  "schema_version": "conn_pilot_literature_guidance_contract_v1",
+  "response_schema_version": "conn_pilot_literature_guidance_v1",
+  "architecture": "client_model_with_deterministic_server_evidence",
+  "operations": [
+    "list_guidance_topics",
+    "get_parameter_guidance",
+    "compare_method_options",
+    "get_evidence_record",
+    "validate_parameter_choice",
+    "record_method_decision",
+    "list_method_decisions",
+    "list_unresolved_project_parameters",
+    "get_project_parameter_guidance",
+    "resolve_project_parameter"
+  ],
+  "evidence_states": [
+    "explicit",
+    "inferred",
+    "not_reported",
+    "not_applicable"
+  ],
+  "context_fields": [
+    "primary_family",
+    "study_design",
+    "modality_or_task",
+    "year_from",
+    "year_to"
+  ],
+  "guarantees": [
+    "The server does not call an AI provider.",
+    "Explicit and inferred observations remain distinguishable.",
+    "Frequencies are descriptive and never emitted as automatic recommendations.",
+    "A parameter choice is not treated as scientifically valid merely because a paper reported it.",
+    "Recorded decisions preserve the corpus version and exact evidence snapshot.",
+    "Every stored decision is scoped to an authenticated project owner.",
+    "Remote submission is blocked until every required executable parameter is bound to a cited investigator decision.",
+    "Project-specific guidance filters observations through the versioned pipeline contract and dataset TR."
+  ]
+}

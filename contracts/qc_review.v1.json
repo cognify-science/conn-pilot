@@ -1,0 +1,48 @@
+{
+  "schema_version": "conn_pilot_qc_review_contract_v1",
+  "evidence": {
+    "per_subject": [
+      "ART screenshot through a one-hour signed URL",
+      "volume_count",
+      "outlier_count",
+      "outlier_percent",
+      "global_signal_z_max",
+      "motion_max_mm",
+      "motion_mean_mm"
+    ],
+    "thresholds": ["global_signal_z", "motion_mm"]
+  },
+  "subject_decisions": {
+    "allowed": ["accept", "exclude", "needs_review"],
+    "exclude_requires_justification": true,
+    "storage": "append-only",
+    "audit_fields": [
+      "decided_by",
+      "decided_at",
+      "result_version",
+      "subject_id"
+    ]
+  },
+  "sample": {
+    "version": "SHA-256 of the ordered included subject identifiers",
+    "on_exclusion_change": "Existing second-level results become stale and blocked",
+    "unblock": "Run a result version whose computed sample matches the reviewed sample"
+  },
+  "states": {
+    "technical_completeness": "Whether execution and required artifacts completed",
+    "subject_quality": "Current investigator decision for every subject",
+    "scientific_acceptance": "Versioned investigator decision for the analysis",
+    "acceptance_gate": [
+      "technical completeness passed",
+      "every subject is accepted or excluded",
+      "at least one subject remains",
+      "second-level results are current for the effective sample"
+    ]
+  },
+  "mcp_tools": [
+    "get_qc_summary",
+    "get_subject_qc",
+    "set_subject_qc_decision",
+    "record_scientific_decision"
+  ]
+}

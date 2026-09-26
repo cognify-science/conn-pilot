@@ -1,0 +1,564 @@
+schema_version: pipeline_instance_v1
+instance_id: pmid_38731091_pipeline_01
+instance_scope: provisional_paper_level
+paper:
+  pmid: '38731091'
+  pmcid: PMC11084533
+  doi: null
+  title: Altered Functional Connectivity during Mild Transient Respiratory Impairment Induced by a Resistive
+    Load
+  year: 2024
+classification:
+  primary_family: rsfmri_graph_theory
+  study_design: Within-subject normal respiration vs effort breathing rs-fMRI/task-like condition comparison
+  modality_or_task: null
+  normalization_status: structurally_verified
+software_environment:
+- name: CONN
+  version: 22a
+  evidence: inferred
+  source_path: conn_usage.conn_version
+  notes: Legacy extraction did not encode field-level evidence; verify against the source.
+- name: SPM
+  version: SPM12
+  evidence: inferred
+  source_path: conn_usage.spm_version
+  notes: Legacy extraction did not encode field-level evidence; verify against the source.
+- name: MATLAB
+  version: R2022b
+  evidence: inferred
+  source_path: conn_usage.matlab_version
+  notes: Legacy extraction did not encode field-level evidence; verify against the source.
+graph:
+  nodes:
+  - id: input
+    layer: input_adapter
+    component_id: functional_structural_dataset
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: clinical_domain
+      value: Respiratory impairment and dyspnoea
+      evidence: inferred
+      source_path: study_context.clinical_domain
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: design
+      value: Within-subject normal respiration vs effort breathing rs-fMRI/task-like condition comparison
+      evidence: inferred
+      source_path: study_context.design
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: primary_question
+      value: Whether mild transient respiratory impairment changes functional connectivity and network
+        centrality.
+      evidence: inferred
+      source_path: study_context.primary_question
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: behavioral_measure
+      value:
+      - Modified Borg scale
+      evidence: inferred
+      source_path: study_context.behavioral_measure
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - study_context
+  - id: preprocessing
+    layer: preprocessing
+    component_id: reported_preprocessing
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+    parameters:
+    - name: pipeline_preset
+      value: CONN default preprocessing pipeline
+      evidence: inferred
+      source_path: conn_usage.preprocessing.pipeline_preset
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: steps
+      value:
+      - Removal of first 10 functional scans
+      - Functional realignment and unwarp
+      - Functional centering to 0,0,0
+      - Slice timing correction
+      - Functional outlier detection with ART
+      - Functional direct segmentation and MNI normalization
+      - Structural centering to 0,0,0
+      - Structural segmentation and MNI normalization
+      - Functional smoothing
+      evidence: inferred
+      source_path: conn_usage.preprocessing.steps
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: smoothing_fwhm_mm
+      value: 8
+      evidence: inferred
+      source_path: conn_usage.preprocessing.smoothing_fwhm_mm
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: outlier_detection.global_signal_threshold_sd
+      value: reported as SD threshold, exact value not extracted
+      evidence: inferred
+      source_path: conn_usage.preprocessing.outlier_detection.global_signal_threshold_sd
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: outlier_detection.framewise_displacement_mm
+      value: 0.5
+      evidence: inferred
+      source_path: conn_usage.preprocessing.outlier_detection.framewise_displacement_mm
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: outlier_detection.tool
+      value: ART
+      evidence: inferred
+      source_path: conn_usage.preprocessing.outlier_detection.tool
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: exclusion_criterion
+      value: Exclude if invalid/outlier scans > 30%
+      evidence: inferred
+      source_path: conn_usage.preprocessing.exclusion_criterion
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.preprocessing
+  - id: denoising
+    layer: denoising
+    component_id: reported_denoising
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - preprocessed_timeseries
+    provides:
+    - denoised_timeseries
+    parameters:
+    - name: method
+      value: CompCor
+      evidence: inferred
+      source_path: conn_usage.denoising.method
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: bandpass_filter_hz
+      value: 0.008-0.09
+      evidence: inferred
+      source_path: conn_usage.denoising.bandpass_filter_hz
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.denoising
+  - id: roi_to_roi
+    layer: first_level_features
+    component_id: roi_to_roi
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: atlas_rois.harvard_oxford_rois
+      value: true
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.atlas_rois.harvard_oxford_rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: atlas_rois.aal_cerebellar_rois
+      value: true
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.atlas_rois.aal_cerebellar_rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: atlas_rois.total_rois
+      value: 164
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.atlas_rois.total_rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: connectivity_measure
+      value: Bivariate correlations between ROI BOLD time courses
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.connectivity_measure
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: transform
+      value: Fisher z
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.transform
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: second_level_model
+      value: Paired t-tests comparing normal respiration and effort breathing
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.second_level_model
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: thresholds.cluster_level
+      value: FDR-corrected p < 0.05
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.thresholds.cluster_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: thresholds.connection_level
+      value: uncorrected p < 0.001
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.thresholds.connection_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.roi_to_roi
+  - id: seed_to_voxel
+    layer: first_level_features
+    component_id: seed_to_voxel
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: seed_selection
+      value: Seeds selected from ROI-to-ROI results and prior respiratory studies
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.seed_selection
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seeds_reported
+      value: &id001
+      - Salience ACC
+      - Left anterior insula
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.seeds_reported
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: connectivity_measure
+      value: Seed time course correlated with each voxel
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.connectivity_measure
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: transform
+      value: Fisher-transformed correlation maps
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.transform
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: second_level_model
+      value: Paired t-tests comparing normal respiration and effort breathing
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.second_level_model
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: thresholds.voxel_level
+      value: uncorrected p < 0.001
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.thresholds.voxel_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: thresholds.cluster_level
+      value: FDR-corrected p < 0.05
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.thresholds.cluster_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.seed_to_voxel
+  - id: graph_theory
+    layer: first_level_features
+    component_id: graph_theory
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: software
+      value: CONN-fMRI Toolbox
+      evidence: inferred
+      source_path: conn_usage.graph_theory.software
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: nodes
+      value: All 164 atlas ROIs
+      evidence: inferred
+      source_path: conn_usage.graph_theory.nodes
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: metrics
+      value: &id002
+      - Degree centrality
+      - Betweenness centrality
+      evidence: inferred
+      source_path: conn_usage.graph_theory.metrics
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: adjacency_threshold
+      value: r = 0.25
+      evidence: inferred
+      source_path: conn_usage.graph_theory.adjacency_threshold
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: analysis_scope
+      value: Regions detected by ROI-to-ROI cluster analysis
+      evidence: inferred
+      source_path: conn_usage.graph_theory.analysis_scope
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: threshold
+      value: uncorrected p < 0.05
+      evidence: inferred
+      source_path: conn_usage.graph_theory.threshold
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: ranking
+      value: Centrality rank among all ROIs
+      evidence: inferred
+      source_path: conn_usage.graph_theory.ranking
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.graph_theory
+  - id: second_level
+    layer: second_level_inference
+    component_id: embedded_group_inference
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+    parameters:
+    - name: roi_to_roi.atlas_rois.harvard_oxford_rois
+      value: true
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.atlas_rois.harvard_oxford_rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.atlas_rois.aal_cerebellar_rois
+      value: true
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.atlas_rois.aal_cerebellar_rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.atlas_rois.total_rois
+      value: 164
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.atlas_rois.total_rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.connectivity_measure
+      value: Bivariate correlations between ROI BOLD time courses
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.connectivity_measure
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.transform
+      value: Fisher z
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.transform
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.second_level_model
+      value: Paired t-tests comparing normal respiration and effort breathing
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.second_level_model
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.thresholds.cluster_level
+      value: FDR-corrected p < 0.05
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.thresholds.cluster_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.thresholds.connection_level
+      value: uncorrected p < 0.001
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.thresholds.connection_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.seed_selection
+      value: Seeds selected from ROI-to-ROI results and prior respiratory studies
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.seed_selection
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.seeds_reported
+      value: *id001
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.seeds_reported
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.connectivity_measure
+      value: Seed time course correlated with each voxel
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.connectivity_measure
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.transform
+      value: Fisher-transformed correlation maps
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.transform
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.second_level_model
+      value: Paired t-tests comparing normal respiration and effort breathing
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.second_level_model
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.thresholds.voxel_level
+      value: uncorrected p < 0.001
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.thresholds.voxel_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.thresholds.cluster_level
+      value: FDR-corrected p < 0.05
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.thresholds.cluster_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: graph_theory.software
+      value: CONN-fMRI Toolbox
+      evidence: inferred
+      source_path: conn_usage.graph_theory.software
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: graph_theory.nodes
+      value: All 164 atlas ROIs
+      evidence: inferred
+      source_path: conn_usage.graph_theory.nodes
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: graph_theory.metrics
+      value: *id002
+      evidence: inferred
+      source_path: conn_usage.graph_theory.metrics
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: graph_theory.adjacency_threshold
+      value: r = 0.25
+      evidence: inferred
+      source_path: conn_usage.graph_theory.adjacency_threshold
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: graph_theory.analysis_scope
+      value: Regions detected by ROI-to-ROI cluster analysis
+      evidence: inferred
+      source_path: conn_usage.graph_theory.analysis_scope
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: graph_theory.threshold
+      value: uncorrected p < 0.05
+      evidence: inferred
+      source_path: conn_usage.graph_theory.threshold
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: graph_theory.ranking
+      value: Centrality rank among all ROIs
+      evidence: inferred
+      source_path: conn_usage.graph_theory.ranking
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage
+  - id: clinical_correlation
+    layer: downstream_analysis
+    component_id: clinical_correlation
+    execution_context: external
+    status: observed
+    optional: false
+    requires:
+    - features_or_group_results
+    provides:
+    - downstream_results
+    parameters:
+    - name: extracted_values
+      value: Mean FC values from significant ROI-to-ROI regions using seed-to-voxel
+      evidence: inferred
+      source_path: conn_usage.clinical_correlation.extracted_values
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: test
+      value: Spearman rank correlation
+      evidence: inferred
+      source_path: conn_usage.clinical_correlation.test
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: software
+      value: SPSS 26
+      evidence: inferred
+      source_path: conn_usage.clinical_correlation.software
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: significance
+      value: p < 0.05
+      evidence: inferred
+      source_path: conn_usage.clinical_correlation.significance
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.clinical_correlation
+  - id: human_review
+    layer: qc_decision
+    component_id: human_confirmation_gate
+    execution_context: human
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters: []
+    source_paths:
+    - automation_assessment.cannot_automate_reliably_without_human_confirmation
+  - id: outputs
+    layer: output_export
+    component_id: reported_outputs
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+    parameters: []
+    source_paths:
+    - results_relevant_to_automation
+  edges:
+  - from: input
+    to: preprocessing
+    relation: data
+  - from: preprocessing
+    to: denoising
+    relation: data
+  - from: denoising
+    to: roi_to_roi
+    relation: data
+  - from: denoising
+    to: seed_to_voxel
+    relation: data
+  - from: denoising
+    to: graph_theory
+    relation: data
+  - from: roi_to_roi
+    to: second_level
+    relation: data
+  - from: seed_to_voxel
+    to: second_level
+    relation: data
+  - from: graph_theory
+    to: second_level
+    relation: data
+  - from: second_level
+    to: clinical_correlation
+    relation: data
+  - from: denoising
+    to: human_review
+    relation: observes
+  - from: roi_to_roi
+    to: human_review
+    relation: observes
+  - from: seed_to_voxel
+    to: human_review
+    relation: observes
+  - from: graph_theory
+    to: human_review
+    relation: observes
+  - from: clinical_correlation
+    to: outputs
+    relation: data
+  - from: roi_to_roi
+    to: seed_to_voxel
+    relation: derives
+  - from: roi_to_roi
+    to: graph_theory
+    relation: derives
+human_confirmations:
+- Exact ART global-signal SD threshold
+- Exact condition/run modeling for normal vs effort breathing
+- Exact prior-study seed inclusion rules
+missing_information: []
+review:
+  source_review_status: structural_methods_verified
+  legacy_schema_shape: custom_deep_extraction
+  split_into_multiple_instances: false
+  notes:
+  - Normalized from a legacy extraction, not re-verified against the publication.
+  - A reviewer must decide whether branches represent separate pipeline instances.
+  source_sections:
+  - 2.5. Data Pre-Processing
+  - 2.6. ROI-to-ROI Analysis
+  - 2.7. Seed-to-Voxel Analysis
+  - 2.8. Graph Theoretical Analysis
+  - 2.9. Correlation with the Modified Borg Scale
+  provisional_pipeline_count: 1
+  split_decision: keep_as_one_conditional_dag
+  confirmed_structure:
+  - Shared CONN preprocessing and denoising feed ROI-to-ROI analysis.
+  - ROI-to-ROI findings help select seed-to-voxel seeds and graph-theory scope.
+  - Clinical correlation is a downstream external analysis.
+  unresolved:
+  - Exact ART global-signal threshold is not extractable from the methods text.
+  - The condition/run encoding for normal and effort breathing needs confirmation.
+  discrepancies: []
+  rejected_components: []
+provenance:
+  source_extraction_ref: test-project/conn-knowledge-builder/extractions/conn_automation/PMID38731091.yaml
+  source_extraction_sha256: 495681ddee888409929c60f23f1169a8de996ca7d61dc2df5c2ba59891d7143c
+  normalizer_version: 0.1.0
+  generated_on: '2026-09-24'

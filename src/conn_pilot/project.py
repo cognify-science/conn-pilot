@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,9 @@ TOP_LEVEL_FIELDS = {"schema_version", "pipeline", "project", "dataset", "subject
 PIPELINE_FIELDS = {"id", "version"}
 PROJECT_FIELDS = {"name", "research_question"}
 DATASET_FIELDS = {"layout", "root", "tr_seconds"}
-PARAMETER_RECORD_FIELDS = {"value", "source", "rationale", "confirmed_by_investigator"}
+PARAMETER_RECORD_REQUIRED_FIELDS = {"value", "source", "rationale", "confirmed_by_investigator"}
+PARAMETER_RECORD_OPTIONAL_FIELDS = {"method_decision_id", "evidence_ids", "corpus_version"}
+PARAMETER_RECORD_FIELDS = PARAMETER_RECORD_REQUIRED_FIELDS | PARAMETER_RECORD_OPTIONAL_FIELDS
 SEED_FIELDS = {"name", "conn_source", "rationale", "confirmed_by_investigator"}
 SUBJECT_FIELDS = {"id", "functional", "structural"}
 DESIGN_FIELDS = {"type", "groups", "covariates", "contrasts"}
@@ -252,7 +255,7 @@ def _validate_parameters(project: dict[str, Any], pipeline: ResolvedPipeline, er
             continue
         fields = set(record)
         unknown_fields = sorted(fields - PARAMETER_RECORD_FIELDS)
-        missing_fields = sorted(PARAMETER_RECORD_FIELDS - fields)
+        missing_fields = sorted(PARAMETER_RECORD_REQUIRED_FIELDS - fields)
         if unknown_fields:
             errors.append(f"parameters.{path} has unknown fields: {', '.join(unknown_fields)}")
         if missing_fields:
@@ -261,6 +264,13 @@ def _validate_parameters(project: dict[str, Any], pipeline: ResolvedPipeline, er
             errors.append(f"parameters.{path} requires source and rationale")
         if spec.get("confirmation_required") and not record.get("confirmed_by_investigator"):
             errors.append(f"parameters.{path} is not confirmed by the investigator")
+        if "method_decision_id" in record:
+            if not record.get("method_decision_id"):
+                errors.append(f"parameters.{path}.method_decision_id cannot be empty")
+            if not isinstance(record.get("evidence_ids"), list) or not record.get("evidence_ids"):
+                errors.append(f"parameters.{path}.evidence_ids must contain cited evidence")
+            if not record.get("corpus_version"):
+                errors.append(f"parameters.{path}.corpus_version is required for a method decision")
         _validate_parameter_value(path, record.get("value"), spec, errors)
     bandpass = nested_get(parameters, "denoising.bandpass_filter_hz.value")
     if isinstance(bandpass, list) and len(bandpass) == 2 and _is_number(tr) and float(tr) > 0:
@@ -300,6 +310,32 @@ def _validate_parameter_value(path: str, value: Any, spec: dict[str, Any], error
         errors.append(f"parameters.{path}.value is valid in principle but not implemented by this pipeline version")
 
 
+def parameter_value_errors(
+    path: str,
+    value: Any,
+    spec: dict[str, Any],
+    *,
+    tr_seconds: Any | None = None,
+) -> list[str]:
+    """Validate one executable parameter without requiring a complete project."""
+    errors: list[str] = []
+    _validate_parameter_value(path, value, spec, errors)
+    if (
+        path == "denoising.bandpass_filter_hz"
+        and isinstance(value, list)
+        and len(value) == 2
+        and _is_number(tr_seconds)
+        and float(tr_seconds) > 0
+        and all(_is_number(item) for item in value)
+    ):
+        nyquist = 1 / (2 * float(tr_seconds))
+        if float(value[1]) >= nyquist:
+            errors.append(
+                f"parameters.{path} high cutoff must be below Nyquist ({nyquist:.6g} Hz)"
+            )
+    return errors
+
+
 def _parameter_paths(value: dict[str, Any], prefix: str = "") -> list[str]:
     result: list[str] = []
     for key, child in value.items():
@@ -318,6 +354,18 @@ def safe_identifier(value: Any) -> str:
     if not result:
         raise ValueError("Identifier must contain at least one alphanumeric character")
     return result
+
+
+def execution_identifier(value: Any, max_length: int = 24) -> str:
+    """Return a short stable identifier for MATLAB/SPM filesystem paths."""
+    result = safe_identifier(value)
+    if max_length < 10:
+        raise ValueError("max_length must be at least 10")
+    if len(result) <= max_length:
+        return result
+    digest = hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:8]
+    prefix = result[: max_length - len(digest) - 1].rstrip("_")
+    return f"{prefix}_{digest}"
 
 
 def _is_number(value: Any) -> bool:

@@ -24,7 +24,27 @@
     "offline_behavior": "Local MATLAB execution continues; the worker retries control-plane synchronization with bounded exponential backoff"
   },
   "data_boundary": {
-    "railway": ["sanitized dataset metadata", "projects", "jobs", "events", "selected result artifacts"],
+    "railway": ["sanitized dataset metadata", "projects", "jobs", "events", "selected result artifacts", "versioned literature evidence", "method decisions and evidence snapshots"],
     "worker": ["dataset paths", "source neuroimages", "writable execution copies", "large derivatives"]
+  },
+  "literature_guidance": {
+    "reasoning": "Performed by the MCP client model",
+    "server": "Deterministic retrieval, comparison, validation and persistence",
+    "provider_api_required": false,
+    "remote_submission_gate": "Every required executable parameter must reference an investigator-confirmed method decision",
+    "resolver_contract": "parameter_resolver.v1.json"
+  },
+  "quality_review": {
+    "contract": "qc_review.v1.json",
+    "subject_decisions": ["accept", "exclude", "needs_review"],
+    "exclusion_justification_required": true,
+    "audit_identity": "Authenticated MCP subject",
+    "result_version_required": true,
+    "sample_change_policy": "Block stale second-level results until recalculated",
+    "separate_states": [
+      "technical_completeness",
+      "subject_quality",
+      "scientific_acceptance"
+    ]
   }
 }

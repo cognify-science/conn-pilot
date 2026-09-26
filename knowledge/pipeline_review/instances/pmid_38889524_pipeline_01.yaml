@@ -1,0 +1,553 @@
+schema_version: pipeline_instance_v1
+instance_id: pmid_38889524_pipeline_01
+instance_scope: provisional_paper_level
+paper:
+  pmid: '38889524'
+  pmcid: PMC11231604
+  doi: 10.1016/j.nicl.2024.103632
+  title: Depressed patients with childhood maltreatment display altered intra- and inter-network resting
+    state functional connectivity
+  year: 2024
+classification:
+  primary_family: clinical_group_comparison
+  study_design: between-group comparisons among MDD+CM, MDD, and healthy controls
+  modality_or_task: resting_state_fmri_plus_t1_mprage
+  normalization_status: structurally_verified
+software_environment:
+- name: CONN
+  version: release 21a
+  evidence: explicit
+  source_path: conn_usage.conn_version
+- name: SPM
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.spm_version
+- name: MATLAB
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.matlab_version
+graph:
+  nodes:
+  - id: input
+    layer: input_adapter
+    component_id: functional_structural_dataset
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: modality
+      value: resting_state_fmri_plus_t1_mprage
+      evidence: explicit
+      source_path: dataset_inputs.modality
+    - name: resting_state
+      value: true
+      evidence: explicit
+      source_path: dataset_inputs.resting_state
+    - name: task_fmri
+      value: false
+      evidence: explicit
+      source_path: dataset_inputs.task_fmri
+    - name: sample_size
+      value: 57
+      evidence: explicit
+      source_path: dataset_inputs.sample_size
+    - name: sessions
+      value: single cross-sectional MRI session
+      evidence: inferred
+      source_path: dataset_inputs.sessions
+    - name: runs
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.runs
+    - name: scanner_field_strength
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.scanner_field_strength
+    - name: tr
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.tr
+    - name: scan_duration
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.scan_duration
+    - name: bids_or_input_standard
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.bids_or_input_standard
+    source_paths:
+    - dataset_inputs
+  - id: preprocessing
+    layer: preprocessing
+    component_id: reported_preprocessing
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+    parameters:
+    - name: pipeline_default_or_custom
+      value: CONN preprocessing for inter-network analysis; FSL/MELODIC/FIX preprocessing for intra-network
+        analysis
+      evidence: explicit
+      source_path: preprocessing.pipeline_default_or_custom
+    - name: steps
+      value:
+      - motion_correction
+      - slice_time_correction
+      - art_based_outlier_detection
+      - simultaneous_normalization_to_mni152
+      - t1_segmentation_into_gm_wm_csf
+      - smoothing
+      evidence: explicit
+      source_path: preprocessing.steps
+    - name: normalization_space
+      value: MNI152
+      evidence: explicit
+      source_path: preprocessing.normalization_space
+    - name: functional_voxel_size
+      value: 2 x 2 x 2 mm
+      evidence: explicit
+      source_path: preprocessing.functional_voxel_size
+    - name: anatomical_voxel_size
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.anatomical_voxel_size
+    - name: smoothing_fwhm
+      value: 6 mm
+      evidence: explicit
+      source_path: preprocessing.smoothing_fwhm
+    - name: slice_timing_correction
+      value: true
+      evidence: explicit
+      source_path: preprocessing.slice_timing_correction
+    - name: realignment_unwarp
+      value: motion correction reported; unwarp not reported
+      evidence: explicit
+      source_path: preprocessing.realignment_unwarp
+    - name: outlier_detection
+      value: true
+      evidence: explicit
+      source_path: preprocessing.outlier_detection
+    source_paths:
+    - preprocessing
+  - id: denoising
+    layer: denoising
+    component_id: reported_denoising
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - preprocessed_timeseries
+    provides:
+    - denoised_timeseries
+    parameters:
+    - name: pipeline_default_or_custom
+      value: standard denoising pipeline according to Nieto-Castanon 2020
+      evidence: explicit
+      source_path: denoising.pipeline_default_or_custom
+    - name: acompcor
+      value: true
+      evidence: inferred
+      source_path: denoising.acompcor
+      notes: WM and CSF first 5 PCA components were regressed; aCompCor is not named in the extracted
+        text.
+    - name: wm_components
+      value: 5
+      evidence: explicit
+      source_path: denoising.wm_components
+    - name: csf_components
+      value: 5
+      evidence: explicit
+      source_path: denoising.csf_components
+    - name: motion_regressors
+      value: 12 realignment parameters
+      evidence: explicit
+      source_path: denoising.motion_regressors
+    - name: scrubbing_regressors
+      value: true
+      evidence: explicit
+      source_path: denoising.scrubbing_regressors
+    - name: global_signal_regression
+      value: false
+      evidence: inferred
+      source_path: denoising.global_signal_regression
+      notes: Global signal regression was not reported.
+    - name: bandpass_filter
+      value: 0.008-0.09 Hz
+      evidence: explicit
+      source_path: denoising.bandpass_filter
+    - name: detrending_or_session_effects
+      value: linear detrending
+      evidence: explicit
+      source_path: denoising.detrending_or_session_effects
+    - name: effective_dof_reported
+      value: false
+      evidence: not_reported
+      source_path: denoising.effective_dof_reported
+    source_paths:
+    - denoising
+  - id: roi_to_voxel
+    layer: first_level_features
+    component_id: roi_to_voxel
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: analysis_types
+      value: &id001
+      - roi_to_voxel
+      - roi_to_roi
+      - mvpa_roi_definition
+      - fsl_dual_regression_intra_network
+      evidence: explicit
+      source_path: connectivity_analysis.analysis_types
+    - name: fc_metric
+      value: FC strengths between seeds, voxels, and ROIs
+      evidence: explicit
+      source_path: connectivity_analysis.fc_metric
+    - name: roi_or_seed_definition
+      value: MVPA-derived ROIs used as seeds; ROI-to-ROI connections to MIST64 atlas ROIs
+      evidence: explicit
+      source_path: connectivity_analysis.roi_or_seed_definition
+    - name: atlas
+      value: MIST64
+      evidence: explicit
+      source_path: connectivity_analysis.atlas
+    - name: network_or_voxel_sampling
+      value: between-group ROI-to-voxel and ROI-to-ROI inter-network FC; FSL dual regression for intra-network
+        FC
+      evidence: explicit
+      source_path: connectivity_analysis.network_or_voxel_sampling
+    source_paths:
+    - connectivity_analysis
+  - id: roi_to_roi
+    layer: first_level_features
+    component_id: roi_to_roi
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: analysis_types
+      value: *id001
+      evidence: explicit
+      source_path: connectivity_analysis.analysis_types
+    - name: fc_metric
+      value: FC strengths between seeds, voxels, and ROIs
+      evidence: explicit
+      source_path: connectivity_analysis.fc_metric
+    - name: roi_or_seed_definition
+      value: MVPA-derived ROIs used as seeds; ROI-to-ROI connections to MIST64 atlas ROIs
+      evidence: explicit
+      source_path: connectivity_analysis.roi_or_seed_definition
+    - name: atlas
+      value: MIST64
+      evidence: explicit
+      source_path: connectivity_analysis.atlas
+    - name: network_or_voxel_sampling
+      value: between-group ROI-to-voxel and ROI-to-ROI inter-network FC; FSL dual regression for intra-network
+        FC
+      evidence: explicit
+      source_path: connectivity_analysis.network_or_voxel_sampling
+    source_paths:
+    - connectivity_analysis
+  - id: mvpa_roi_definition
+    layer: first_level_features
+    component_id: mvpa_roi_definition
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: analysis_types
+      value: *id001
+      evidence: explicit
+      source_path: connectivity_analysis.analysis_types
+    - name: fc_metric
+      value: FC strengths between seeds, voxels, and ROIs
+      evidence: explicit
+      source_path: connectivity_analysis.fc_metric
+    - name: roi_or_seed_definition
+      value: MVPA-derived ROIs used as seeds; ROI-to-ROI connections to MIST64 atlas ROIs
+      evidence: explicit
+      source_path: connectivity_analysis.roi_or_seed_definition
+    - name: atlas
+      value: MIST64
+      evidence: explicit
+      source_path: connectivity_analysis.atlas
+    - name: network_or_voxel_sampling
+      value: between-group ROI-to-voxel and ROI-to-ROI inter-network FC; FSL dual regression for intra-network
+        FC
+      evidence: explicit
+      source_path: connectivity_analysis.network_or_voxel_sampling
+    source_paths:
+    - connectivity_analysis
+  - id: fsl_dual_regression_intra_network
+    layer: first_level_features
+    component_id: fsl_dual_regression_intra_network
+    execution_context: external
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: analysis_types
+      value: *id001
+      evidence: explicit
+      source_path: connectivity_analysis.analysis_types
+    - name: fc_metric
+      value: FC strengths between seeds, voxels, and ROIs
+      evidence: explicit
+      source_path: connectivity_analysis.fc_metric
+    - name: roi_or_seed_definition
+      value: MVPA-derived ROIs used as seeds; ROI-to-ROI connections to MIST64 atlas ROIs
+      evidence: explicit
+      source_path: connectivity_analysis.roi_or_seed_definition
+    - name: atlas
+      value: MIST64
+      evidence: explicit
+      source_path: connectivity_analysis.atlas
+    - name: network_or_voxel_sampling
+      value: between-group ROI-to-voxel and ROI-to-ROI inter-network FC; FSL dual regression for intra-network
+        FC
+      evidence: explicit
+      source_path: connectivity_analysis.network_or_voxel_sampling
+    source_paths:
+    - connectivity_analysis
+  - id: second_level
+    layer: second_level_inference
+    component_id: reported_statistical_model
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+    parameters:
+    - name: first_level_model
+      value: ROI-to-voxel and ROI-to-ROI FC from MVPA-defined seeds; intra-network FSL dual regression
+      evidence: explicit
+      source_path: statistics.first_level_model
+    - name: second_level_model
+      value: between-group comparisons among MDD+CM, MDD, and healthy controls
+      evidence: explicit
+      source_path: statistics.second_level_model
+    - name: covariates
+      value:
+      - age
+      - gender
+      evidence: explicit
+      source_path: statistics.covariates
+    - name: multiple_comparison_correction
+      value: 'ROI-to-voxel: GRF cluster inference with FDR cluster p < 0.05 and voxel p < 0.001 uncorrected;
+        ROI-to-ROI: connection p < 0.05 uncorrected and ROI-level FDR cluster p < 0.05; FSL dual regression
+        used permutation testing with 10,000 permutations and TFCE'
+      evidence: explicit
+      source_path: statistics.multiple_comparison_correction
+    - name: machine_learning
+      value: false
+      evidence: explicit
+      source_path: statistics.machine_learning
+    source_paths:
+    - statistics
+  - id: qc
+    layer: qc_decision
+    component_id: reported_qc
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters:
+    - name: qc_reported
+      value: true
+      evidence: inferred
+      source_path: qc.qc_reported
+      notes: Legacy evidence level was 'partial'; verify against the source.
+    - name: raw_qc
+      value: null
+      evidence: not_reported
+      source_path: qc.raw_qc
+    - name: preprocessing_qc
+      value: ART-based outlier detection reported
+      evidence: explicit
+      source_path: qc.preprocessing_qc
+    - name: denoising_qc
+      value: null
+      evidence: not_reported
+      source_path: qc.denoising_qc
+    - name: fd_threshold
+      value: null
+      evidence: not_reported
+      source_path: qc.fd_threshold
+    - name: global_signal_threshold
+      value: null
+      evidence: not_reported
+      source_path: qc.global_signal_threshold
+    - name: subject_exclusion_rule
+      value: clinical exclusions and group definitions based on MDD and childhood maltreatment; imaging
+        QC exclusions not reported in extracted text
+      evidence: inferred
+      source_path: qc.subject_exclusion_rule
+      notes: Legacy evidence level was 'partial'; verify against the source.
+    - name: qc_fc
+      value: false
+      evidence: not_reported
+      source_path: qc.qc_fc
+    - name: qc_success_threshold
+      value: null
+      evidence: not_reported
+      source_path: qc.qc_success_threshold
+    source_paths:
+    - qc
+  - id: outputs
+    layer: output_export
+    component_id: reported_outputs
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+    parameters:
+    - name: primary_success_signal
+      value: successful
+      evidence: explicit
+      source_path: outcomes.primary_success_signal
+    - name: reported_problems
+      value:
+      - relatively_small_sample_size
+      - cross_sectional_design
+      - retrospective_self_report_for_childhood_maltreatment
+      - heterogeneous_prior_literature
+      evidence: explicit
+      source_path: outcomes.reported_problems
+    - name: limitations_relevant_to_automation
+      value:
+      - acquisition_parameters_not_reported_in_main_text
+      - conn_gui_or_batch_not_reported
+      - fd_and_gsc_thresholds_not_reported
+      - mvpa_roi_generation_requires_more_detail_for_exact_reproduction
+      - pipeline_splits_intra_network_fsl_and_inter_network_conn
+      evidence: inferred
+      source_path: outcomes.limitations_relevant_to_automation
+    source_paths:
+    - outcomes
+  edges:
+  - from: input
+    to: preprocessing
+    relation: data
+  - from: preprocessing
+    to: denoising
+    relation: data
+  - from: denoising
+    to: roi_to_voxel
+    relation: data
+  - from: denoising
+    to: roi_to_roi
+    relation: data
+  - from: denoising
+    to: mvpa_roi_definition
+    relation: data
+  - from: denoising
+    to: fsl_dual_regression_intra_network
+    relation: data
+  - from: roi_to_voxel
+    to: second_level
+    relation: data
+  - from: roi_to_roi
+    to: second_level
+    relation: data
+  - from: mvpa_roi_definition
+    to: second_level
+    relation: data
+  - from: fsl_dual_regression_intra_network
+    to: second_level
+    relation: data
+  - from: input
+    to: qc
+    relation: observes
+  - from: denoising
+    to: qc
+    relation: observes
+  - from: roi_to_voxel
+    to: qc
+    relation: observes
+  - from: roi_to_roi
+    to: qc
+    relation: observes
+  - from: mvpa_roi_definition
+    to: qc
+    relation: observes
+  - from: fsl_dual_regression_intra_network
+    to: qc
+    relation: observes
+  - from: second_level
+    to: outputs
+    relation: data
+human_confirmations:
+- whether_to_reproduce_fsl_intra_network_branch
+- mvpa_roi_definition_and_number_of_components
+- imaging_qc_thresholds
+- final_group_contrasts
+- interpretation_of_cross_sectional_clinical_findings
+missing_information:
+- tr
+- scan_duration
+- scanner_field_strength
+- number_of_runs
+- exact_art_thresholds
+- exact_conn_batch_or_gui_settings
+- details_of_mvpa_roi_selection
+- denoising_qc_outputs
+review:
+  source_review_status: structural_methods_verified
+  legacy_schema_shape: canonical_extraction
+  split_into_multiple_instances: true
+  notes:
+  - Normalized from a legacy extraction, not re-verified against the publication.
+  - A reviewer must decide whether branches represent separate pipeline instances.
+  source_sections:
+  - Data processing
+  - Pre-processing for intra-network rs-fMRI data analysis
+  - Intra-network rs-fMRI data analysis
+  - Pre-processing for inter-network rs-fMRI data analysis
+  - Inter-network rs-fMRI data analysis
+  provisional_pipeline_count: 2
+  split_decision: split_fsl_intra_network_from_conn_inter_network
+  confirmed_structure:
+  - One branch uses FSL ICA, FIX and dual regression for intra-network analysis.
+  - A separate branch uses CONN 21a, MVPA-derived seeds, ROI-to-voxel and ROI-to-ROI analyses.
+  - The branches share a scientific comparison but use different preprocessing and inference stacks.
+  unresolved:
+  - The current provisional graph must be split into two linked instances.
+  - Exact ART thresholds and MVPA ROI-generation parameters remain incomplete.
+  discrepancies:
+  - The legacy single-record extraction hides two distinct executable pipelines.
+  rejected_components: []
+provenance:
+  source_extraction_ref: test-project/conn-knowledge-builder/extractions/conn_automation/PMID38889524.yaml
+  source_extraction_sha256: 27bcfbdac51fefb54e5be6fd48888022c16534f71d8bb57ea242b5ab9c807c2e
+  normalizer_version: 0.1.0
+  generated_on: '2026-09-24'

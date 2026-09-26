@@ -1,0 +1,486 @@
+schema_version: pipeline_instance_v1
+instance_id: pmid_34194974_pipeline_01
+instance_scope: provisional_paper_level
+paper:
+  pmid: '34194974'
+  pmcid: PMC8237306
+  doi: 10.1016/j.imr.2021.100750
+  title: 'Comparing cognition, coping skills and vedic personality of individuals practicing yoga, physical
+    exercise or sedentary lifestyle: a cross-sectional fMRI study.'
+  year: 2022
+classification:
+  primary_family: task_fmri_connectivity
+  study_design: &id003
+  - anova
+  - covariate
+  modality_or_task: task_fmri_plus_anatomical_mri
+  normalization_status: structurally_verified
+software_environment:
+- name: CONN
+  version: 18.a
+  evidence: explicit
+  source_path: review.source_sections
+  notes: Corrected during structural verification against the methods text.
+- name: SPM
+  version: '12'
+  evidence: explicit
+  source_path: review.source_sections
+  notes: Corrected during structural verification against the methods text.
+- name: MATLAB
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.matlab_version
+graph:
+  nodes:
+  - id: input
+    layer: input_adapter
+    component_id: functional_structural_dataset
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: modality
+      value: task_fmri_plus_anatomical_mri
+      evidence: inferred
+      source_path: dataset_inputs.modality
+    - name: resting_state
+      value: false
+      evidence: inferred
+      source_path: dataset_inputs.resting_state
+    - name: task_fmri
+      value: true
+      evidence: inferred
+      source_path: dataset_inputs.task_fmri
+    - name: sample_size
+      value: 13
+      evidence: explicit
+      source_path: dataset_inputs.sample_size
+    - name: sessions
+      value: post, pre
+      evidence: inferred
+      source_path: dataset_inputs.sessions
+    - name: runs
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.runs
+    - name: scanner_field_strength
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.scanner_field_strength
+    - name: tr
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.tr
+    - name: scan_duration
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.scan_duration
+    - name: bids_or_input_standard
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.bids_or_input_standard
+    source_paths:
+    - dataset_inputs
+  - id: preprocessing
+    layer: preprocessing
+    component_id: reported_preprocessing
+    execution_context: external
+    status: observed
+    optional: false
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+    parameters:
+    - name: pipeline_default_or_custom
+      value: conn_preprocessing
+      evidence: inferred
+      source_path: preprocessing.pipeline_default_or_custom
+    - name: steps
+      value:
+      - realignment
+      - unwarp
+      - normalization
+      - segmentation
+      - smoothing
+      - outlier_detection
+      evidence: inferred
+      source_path: preprocessing.steps
+    - name: normalization_space
+      value: MNI
+      evidence: inferred
+      source_path: preprocessing.normalization_space
+    - name: functional_voxel_size
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.functional_voxel_size
+    - name: anatomical_voxel_size
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.anatomical_voxel_size
+    - name: smoothing_fwhm
+      value: 6 mm
+      evidence: explicit
+      source_path: review.source_sections
+    - name: slice_timing_correction
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.slice_timing_correction
+    - name: realignment_unwarp
+      value: true
+      evidence: explicit
+      source_path: preprocessing.realignment_unwarp
+    - name: outlier_detection
+      value: true
+      evidence: explicit
+      source_path: preprocessing.outlier_detection
+    - name: motion_exclusion_threshold
+      value: translation > 2 mm or rotation > 1 degree
+      evidence: explicit
+      source_path: review.source_sections
+    source_paths:
+    - preprocessing
+  - id: denoising
+    layer: denoising
+    component_id: reported_denoising
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - preprocessed_timeseries
+    provides:
+    - denoised_timeseries
+    parameters:
+    - name: pipeline_default_or_custom
+      value: CONN denoising
+      evidence: inferred
+      source_path: denoising.pipeline_default_or_custom
+    - name: acompcor
+      value: true
+      evidence: inferred
+      source_path: denoising.acompcor
+    - name: wm_components
+      value: null
+      evidence: not_reported
+      source_path: denoising.wm_components
+    - name: csf_components
+      value: null
+      evidence: not_reported
+      source_path: denoising.csf_components
+    - name: motion_regressors
+      value: motion parameters reported, exact count unclear
+      evidence: inferred
+      source_path: denoising.motion_regressors
+    - name: scrubbing_regressors
+      value: true
+      evidence: explicit
+      source_path: denoising.scrubbing_regressors
+    - name: global_signal_regression
+      value: null
+      evidence: not_reported
+      source_path: denoising.global_signal_regression
+    - name: bandpass_filter
+      value: null
+      evidence: not_reported
+      source_path: denoising.bandpass_filter
+    - name: detrending_or_session_effects
+      value: null
+      evidence: not_reported
+      source_path: denoising.detrending_or_session_effects
+    - name: effective_dof_reported
+      value: null
+      evidence: not_reported
+      source_path: denoising.effective_dof_reported
+    - name: frequency_filter
+      value: frequencies below 0.01 Hz retained
+      evidence: explicit
+      source_path: review.source_sections
+    source_paths:
+    - denoising
+  - id: cortical_morphometry
+    layer: first_level_features
+    component_id: cortical_morphometry
+    execution_context: external
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: fc_metric
+      value: Fisher-transformed correlation
+      evidence: inferred
+      source_path: review.source_sections.fc_metric
+    - name: roi_or_seed_definition
+      value: &id001
+      - atlas
+      - region of interest
+      - roi
+      - seed
+      evidence: explicit
+      source_path: review.source_sections.roi_or_seed_definition
+    - name: atlas
+      value: &id002 []
+      evidence: not_reported
+      source_path: review.source_sections.atlas
+    - name: network_or_voxel_sampling
+      value: null
+      evidence: inferred
+      source_path: review.source_sections.network_or_voxel_sampling
+    source_paths:
+    - review.source_sections
+  - id: task_activation_glm
+    layer: first_level_features
+    component_id: task_activation_glm
+    execution_context: external
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: fc_metric
+      value: Fisher-transformed correlation
+      evidence: inferred
+      source_path: review.source_sections.fc_metric
+    - name: roi_or_seed_definition
+      value: *id001
+      evidence: explicit
+      source_path: review.source_sections.roi_or_seed_definition
+    - name: atlas
+      value: *id002
+      evidence: not_reported
+      source_path: review.source_sections.atlas
+    - name: network_or_voxel_sampling
+      value: null
+      evidence: inferred
+      source_path: review.source_sections.network_or_voxel_sampling
+    source_paths:
+    - review.source_sections
+  - id: seed_to_voxel
+    layer: first_level_features
+    component_id: seed_to_voxel
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: fc_metric
+      value: Fisher-transformed correlation
+      evidence: inferred
+      source_path: connectivity_analysis.fc_metric
+    - name: roi_or_seed_definition
+      value: *id001
+      evidence: explicit
+      source_path: connectivity_analysis.roi_or_seed_definition
+    - name: atlas
+      value: *id002
+      evidence: not_reported
+      source_path: connectivity_analysis.atlas
+    - name: network_or_voxel_sampling
+      value: null
+      evidence: inferred
+      source_path: connectivity_analysis.network_or_voxel_sampling
+    source_paths:
+    - connectivity_analysis
+  - id: second_level
+    layer: second_level_inference
+    component_id: reported_statistical_model
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+    parameters:
+    - name: first_level_model
+      value: condition_or_contrast_connectivity_estimation
+      evidence: inferred
+      source_path: statistics.first_level_model
+    - name: second_level_model
+      value: *id003
+      evidence: explicit
+      source_path: statistics.second_level_model
+    - name: covariates
+      value:
+      - covariate
+      evidence: inferred
+      source_path: statistics.covariates
+    - name: multiple_comparison_correction
+      value: []
+      evidence: not_reported
+      source_path: statistics.multiple_comparison_correction
+    - name: machine_learning
+      value: null
+      evidence: not_reported
+      source_path: statistics.machine_learning
+    source_paths:
+    - statistics
+  - id: qc
+    layer: qc_decision
+    component_id: reported_qc
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters:
+    - name: qc_reported
+      value: true
+      evidence: inferred
+      source_path: qc.qc_reported
+    - name: raw_qc
+      value: null
+      evidence: not_reported
+      source_path: qc.raw_qc
+    - name: preprocessing_qc
+      value: true
+      evidence: inferred
+      source_path: qc.preprocessing_qc
+    - name: denoising_qc
+      value: false
+      evidence: inferred
+      source_path: qc.denoising_qc
+    - name: fd_threshold
+      value: null
+      evidence: not_reported
+      source_path: qc.fd_threshold
+    - name: global_signal_threshold
+      value: null
+      evidence: not_reported
+      source_path: qc.global_signal_threshold
+    - name: subject_exclusion_rule
+      value: null
+      evidence: not_reported
+      source_path: qc.subject_exclusion_rule
+    - name: qc_fc
+      value: null
+      evidence: not_reported
+      source_path: qc.qc_fc
+    - name: qc_success_threshold
+      value: null
+      evidence: not_reported
+      source_path: qc.qc_success_threshold
+    source_paths:
+    - qc
+  - id: outputs
+    layer: output_export
+    component_id: reported_outputs
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+    parameters:
+    - name: primary_success_signal
+      value: successful_or_partially_successful_results_reported
+      evidence: inferred
+      source_path: outcomes.primary_success_signal
+    - name: reported_problems
+      value: []
+      evidence: not_reported
+      source_path: outcomes.reported_problems
+    - name: limitations_relevant_to_automation
+      value: &id004
+      - conn_version
+      - bandpass_filter
+      evidence: explicit
+      source_path: outcomes.limitations_relevant_to_automation
+    source_paths:
+    - outcomes
+  edges:
+  - from: input
+    to: preprocessing
+    relation: data
+  - from: preprocessing
+    to: denoising
+    relation: data
+  - from: denoising
+    to: cortical_morphometry
+    relation: data
+  - from: denoising
+    to: task_activation_glm
+    relation: data
+  - from: denoising
+    to: seed_to_voxel
+    relation: data
+  - from: cortical_morphometry
+    to: second_level
+    relation: data
+  - from: task_activation_glm
+    to: second_level
+    relation: data
+  - from: seed_to_voxel
+    to: second_level
+    relation: data
+  - from: input
+    to: qc
+    relation: observes
+  - from: denoising
+    to: qc
+    relation: observes
+  - from: cortical_morphometry
+    to: qc
+    relation: observes
+  - from: task_activation_glm
+    to: qc
+    relation: observes
+  - from: seed_to_voxel
+    to: qc
+    relation: observes
+  - from: second_level
+    to: outputs
+    relation: data
+human_confirmations:
+- bandpass_filter
+- conn_version
+- final_scientific_question_and_contrasts
+missing_information: *id004
+review:
+  source_review_status: structural_methods_verified
+  legacy_schema_shape: canonical_extraction
+  split_into_multiple_instances: false
+  notes:
+  - Normalized from a legacy extraction, not re-verified against the publication.
+  - A reviewer must decide whether branches represent separate pipeline instances.
+  source_sections:
+  - Functional MRI Tasks
+  - Anatomical (3DT1) data analysis
+  - fMRI data analysis
+  - Functional connectivity analysis
+  provisional_pipeline_count: 1
+  split_decision: keep_parallel_structural_task_activation_and_connectivity_branches
+  confirmed_structure:
+  - CAT12 morphometry, SPM12 task activation and CONN 18.a task connectivity form three linked analysis
+    branches.
+  - Eight dorsal-attention and frontoparietal seeds feed condition-weighted seed-to-voxel correlation
+    maps across three cognitive tasks.
+  - Task activation helps select the networks used for connectivity but the connectivity model is weighted
+    correlation rather than PPI.
+  unresolved:
+  - CAT12 and MATLAB versions, ART thresholds and exact condition regressors exported to CONN are not
+    reported.
+  - Several activation findings are only reported at liberal uncorrected thresholds and must not drive
+    automatic seed recommendations without warning.
+  discrepancies:
+  - The task-connectivity branch uses HRF-weighted bivariate correlation, not a PPI interaction model.
+  rejected_components:
+  - conn_preprocessing
+  - ppi_or_gppi
+provenance:
+  source_extraction_ref: test-project/conn-knowledge-builder/extractions/conn_automation/PMID34194974.yaml
+  source_extraction_sha256: b19fa2736863bca1a1c3f593c1a76c19500646946089b042caff4edb553daa80
+  normalizer_version: 0.1.0
+  generated_on: '2026-09-24'

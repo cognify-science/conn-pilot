@@ -1,0 +1,353 @@
+schema_version: pipeline_instance_v1
+instance_id: pmid_37371347_pipeline_01
+instance_scope: provisional_paper_level
+paper:
+  pmid: '37371347'
+  pmcid: PMC10296260
+  doi: null
+  title: Analysis of Functional Neuroplastic Changes in the Cortical Language System in Relation to Different
+    Growth Patterns of Glioblastoma
+  year: 2023
+classification:
+  primary_family: task_fmri_connectivity
+  study_design: Task fMRI group comparison
+  modality_or_task: null
+  normalization_status: structurally_verified
+software_environment:
+- name: CONN
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.conn_version
+- name: SPM
+  version: SPM12
+  evidence: inferred
+  source_path: conn_usage.spm_version
+  notes: Legacy extraction did not encode field-level evidence; verify against the source.
+- name: MATLAB
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.matlab_version
+graph:
+  nodes:
+  - id: input
+    layer: input_adapter
+    component_id: spm_project_import
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: clinical_domain
+      value: Glioblastoma and language-network plasticity
+      evidence: inferred
+      source_path: study_context.clinical_domain
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: design
+      value: Task fMRI group comparison
+      evidence: inferred
+      source_path: study_context.design
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: groups
+      value:
+      - Uniform tumor growth pattern
+      - Diffuse tumor growth pattern
+      - Matched healthy controls
+      evidence: inferred
+      source_path: study_context.groups
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: task_paradigms
+      value:
+      - Verb generation
+      - Antonym generation
+      - Syntax generation
+      evidence: inferred
+      source_path: study_context.task_paradigms
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: primary_question
+      value: Whether glioblastoma growth pattern affects BOLD signal, laterality, and functional connectivity
+        during language fMRI.
+      evidence: inferred
+      source_path: study_context.primary_question
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - study_context
+  - id: external_preprocessing
+    layer: preprocessing
+    component_id: external_spm_preprocessing
+    execution_context: external
+    status: observed
+    optional: false
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+    parameters:
+    - name: software
+      value: SPM12
+      evidence: inferred
+      source_path: non_conn_processing.task_fmri_preprocessing.software
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: steps
+      value:
+      - Realignment
+      - Functional-structural coregistration
+      - Normalization to MNI space
+      - Spatial smoothing
+      evidence: inferred
+      source_path: non_conn_processing.task_fmri_preprocessing.steps
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: smoothing_fwhm_mm
+      value: 8 x 8 x 8
+      evidence: inferred
+      source_path: non_conn_processing.task_fmri_preprocessing.smoothing_fwhm_mm
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: first_level_model.model
+      value: General linear model
+      evidence: inferred
+      source_path: non_conn_processing.task_fmri_preprocessing.first_level_model.model
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: first_level_model.task_regressor
+      value: Each language examination condition convolved with HRF
+      evidence: inferred
+      source_path: non_conn_processing.task_fmri_preprocessing.first_level_model.task_regressor
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: first_level_model.baseline
+      value: Fixation periods implicit, not modeled as separate regressor
+      evidence: inferred
+      source_path: non_conn_processing.task_fmri_preprocessing.first_level_model.baseline
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: first_level_model.motion_regressors
+      value: 6
+      evidence: inferred
+      source_path: non_conn_processing.task_fmri_preprocessing.first_level_model.motion_regressors
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - non_conn_processing.task_fmri_preprocessing
+  - id: conn_import
+    layer: input_adapter
+    component_id: conn_external_project_import
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: source
+      value: Previously preprocessed SPM12 analyses
+      evidence: inferred
+      source_path: conn_usage.data_import.source
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: reused_files
+      value:
+      - SPM.mat
+      evidence: inferred
+      source_path: conn_usage.data_import.reused_files
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.data_import
+  - id: denoising
+    layer: denoising
+    component_id: reported_denoising
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - preprocessed_timeseries
+    provides:
+    - denoised_timeseries
+    parameters:
+    - name: bandpass_filter_hz
+      value: 0.008-0.09
+      evidence: inferred
+      source_path: conn_usage.denoising.bandpass_filter_hz
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: confounds
+      value:
+      - Realignment parameters
+      - First-order temporal derivatives of realignment parameters
+      evidence: inferred
+      source_path: conn_usage.denoising.confounds
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: additional_steps
+      value:
+      - Linear detrending
+      evidence: inferred
+      source_path: conn_usage.denoising.additional_steps
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.denoising
+  - id: roi_to_roi
+    layer: first_level_features
+    component_id: roi_to_roi
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: roi_count
+      value: 23
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.roi_count
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: networks
+      value: &id001
+      - Default Mode network
+      - Salience network
+      - Dorsal Attention network
+      - Frontoparietal network
+      - Language network
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.networks
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: analysis_scope
+      value: &id002
+      - Intra-network connectivity
+      - Inter-network connectivity
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.analysis_scope
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: comparisons
+      value: &id003
+      - Diffuse tumor growth pattern vs controls
+      - Uniform tumor growth pattern vs controls
+      - Uniform vs diffuse tumor growth pattern
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.comparisons
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: task_specific_analyses
+      value: &id004
+      - Verb generation
+      - Antonym generation
+      - Syntax generation
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.task_specific_analyses
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.roi_to_roi
+  - id: second_level
+    layer: second_level_inference
+    component_id: embedded_group_inference
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+    parameters:
+    - name: roi_to_roi.roi_count
+      value: 23
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.roi_count
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.networks
+      value: *id001
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.networks
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.analysis_scope
+      value: *id002
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.analysis_scope
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.comparisons
+      value: *id003
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.comparisons
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.task_specific_analyses
+      value: *id004
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.task_specific_analyses
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage
+  - id: human_review
+    layer: qc_decision
+    component_id: human_confirmation_gate
+    execution_context: human
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters: []
+    source_paths:
+    - automation_assessment.cannot_automate_reliably_without_human_confirmation
+  - id: outputs
+    layer: output_export
+    component_id: reported_outputs
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+    parameters: []
+    source_paths:
+    - results_relevant_to_automation
+  edges:
+  - from: input
+    to: external_preprocessing
+    relation: data
+  - from: external_preprocessing
+    to: conn_import
+    relation: data
+  - from: conn_import
+    to: denoising
+    relation: data
+  - from: denoising
+    to: roi_to_roi
+    relation: data
+  - from: roi_to_roi
+    to: second_level
+    relation: data
+  - from: denoising
+    to: human_review
+    relation: observes
+  - from: roi_to_roi
+    to: human_review
+    relation: observes
+  - from: second_level
+    to: outputs
+    relation: data
+human_confirmations:
+- Exact CONN version
+- Exact 23 ROI labels
+- Task condition definitions inside CONN after SPM import
+- Denoising choices beyond motion, derivatives, detrending, and bandpass
+- Statistical thresholds used for CONN ROI-to-ROI connectivity
+- Scanner/site harmonization strategy
+missing_information: []
+review:
+  source_review_status: structural_methods_verified
+  legacy_schema_shape: custom_deep_extraction
+  split_into_multiple_instances: false
+  notes:
+  - Normalized from a legacy extraction, not re-verified against the publication.
+  - A reviewer must decide whether branches represent separate pipeline instances.
+  source_sections:
+  - 2.3. Data Analysis
+  provisional_pipeline_count: 1
+  split_decision: keep_conn_connectivity_pipeline_with_linked_external_task_analyses
+  confirmed_structure:
+  - SPM12 performs task preprocessing and first-level GLM before CONN import.
+  - CONN reuses SPM.mat, denoises the data and performs ROI-to-ROI connectivity.
+  - Percent signal change and laterality are external linked analyses.
+  unresolved:
+  - Exact CONN version and the 23 ROI labels are absent.
+  - Task-condition mapping and CONN statistical thresholds require confirmation.
+  discrepancies: []
+  rejected_components: []
+provenance:
+  source_extraction_ref: test-project/conn-knowledge-builder/extractions/conn_automation/PMID37371347.yaml
+  source_extraction_sha256: 9899d15be8b54820261647f27de27141ce0754064ce537d9aebcc1f3818e88f7
+  normalizer_version: 0.1.0
+  generated_on: '2026-09-24'

@@ -63,7 +63,11 @@ python -m conn_pilot operation get_qc_summary JOB_ID
 
 `submit_job` guarda el pedido y lanza un proceso local separado, por lo que devuelve el identificador sin esperar a que termine MATLAB. La base SQLite admite una sola ejecución activa para evitar que dos análisis compitan por CPU, memoria y licencias. Las respuestas contienen `schema_version`, `operation`, `ok`, `data`, `errors` y `warnings`. El contrato completo está en `contracts/operations.v1.json`.
 
-El resumen de QC verifica completitud técnica e indexa la evidencia por sujeto. Esta versión deja explícitamente la decisión científica de aceptar o excluir sujetos para revisión humana.
+El resumen de QC verifica completitud técnica e indexa la evidencia por sujeto.
+La ejecución de MATLAB exporta para cada sujeto la captura ART, cantidad y
+porcentaje de outliers, máximo de señal global y valores de movimiento. La
+revisión remota conserva por separado la completitud técnica, la calidad de
+cada sujeto y la aceptación científica del análisis.
 
 ## Servidor MCP local
 
@@ -110,6 +114,57 @@ Codex -> MCP/API Railway -> PostgreSQL
 
 El contrato está en `contracts/distributed.v1.json`. Los ejemplos de configuración son `config/control-plane.example.env`, `config/worker.example.env` y `config/datasets.example.yaml`.
 
+### Revisión de calidad y aceptación científica
+
+El MCP remoto expone cuatro operaciones para revisar una versión de resultado:
+
+- `get_qc_summary`: muestra los tres estados independientes y la vigencia del segundo nivel.
+- `get_subject_qc`: devuelve métricas ART y enlaces firmados de una hora para las imágenes de cada sujeto.
+- `set_subject_qc_decision`: registra `accept`, `exclude` o `needs_review`; toda exclusión exige justificación.
+- `record_scientific_decision`: registra `accept`, `reject` o `needs_review` para el análisis completo.
+
+Cada decisión guarda la identidad autenticada, la fecha, `result_version` y,
+para la decisión científica, `sample_version`. El historial es append-only. Si
+una exclusión cambia la muestra, los resultados de segundo nivel existentes se
+marcan como `stale` y se bloquea la aceptación científica hasta ejecutar una
+versión calculada con la muestra revisada. El contrato está en
+`contracts/qc_review.v1.json`.
+
+### Asesor de literatura en el cliente
+
+El plano de control publica evidencia metodológica estructurada mediante MCP y
+deja la interpretación a ChatGPT, Codex u otro cliente con IA. Railway no llama
+a un proveedor de modelos y no necesita `OPENAI_API_KEY`.
+
+Las herramientas disponibles son:
+
+- `list_guidance_topics`
+- `get_parameter_guidance`
+- `compare_method_options`
+- `get_evidence_record`
+- `validate_parameter_choice`
+- `record_method_decision`
+- `list_method_decisions`
+- `list_unresolved_project_parameters`
+- `get_project_parameter_guidance`
+- `resolve_project_parameter`
+
+Las consultas distinguen observaciones explícitas, inferidas y no reportadas.
+Las comparaciones son descriptivas: nunca convierten la frecuencia en un valor
+recomendado. Una decisión confirmada por el investigador conserva en PostgreSQL
+la versión del corpus, la justificación y una copia exacta de la evidencia
+consultada. El contrato está en `contracts/literature_guidance.v1.json`.
+
+El `Parameter Resolver v1` conecta esa evidencia con los siete parámetros
+ejecutables iniciales de preprocessing y denoising. Filtra las observaciones
+por el contrato de la versión del pipeline y por metadatos del dataset, exige
+una coincidencia explícita para la opción elegida y actualiza en una sola
+transacción el proyecto y su decisión metodológica. En Railway, un proyecto no
+puede enviarse mientras alguno de esos parámetros carezca de confirmación,
+evidencia y versión de corpus. El plan de ejecución incluye los parámetros
+resueltos y sus identificadores de decisión. El contrato está en
+`contracts/parameter_resolver.v1.json`.
+
 El worker se inicia con:
 
 ```powershell
@@ -148,6 +203,13 @@ Durante el piloto se usa la conexión Passwordless Email de Auth0 con códigos d
 
 Las imágenes fuente no se transfieren a Railway. La incorporación de un dataset nuevo requiere registrarlo localmente en la desktop.
 
+## Deuda técnica documentada
+
+- [Contrato modular de flujos y criterios de aceptación](docs/technical-debt.md)
+- [Evaluación del sistema de literatura y orientación metodológica](docs/literature-guidance-evaluation.md)
+- [Plan de revisión y taxonomía de pipelines](docs/pipeline-literature-review-plan.md)
+- [Revisión reproducible: manifiesto, esquema, censo y casos normalizados](knowledge/pipeline_review/README.md)
+
 ## Garantías del motor
 
 - Rechaza campos y parámetros desconocidos.
@@ -155,6 +217,7 @@ Las imágenes fuente no se transfieren a Railway. La incorporación de un datase
 - Bloquea decisiones científicas sin confirmación.
 - Genera MATLAB sólo desde un proyecto validado.
 - Copia las imágenes a un directorio aislado por ejecución antes de invocar CONN, porque el preprocesamiento modifica encabezados y crea derivados junto a las entradas.
+- Usa identificadores físicos cortos y determinísticos para evitar el límite efectivo de rutas de MATLAB/SPM en Windows, conservando el nombre científico completo en el proyecto y la base de trabajos.
 - Conserva una copia del proyecto y hashes del batch ejecutado.
 - Marca una ejecución como exitosa sólo si encuentra el proyecto CONN y los resultados de ambos niveles.
 

@@ -161,12 +161,31 @@ class OperationTests(unittest.TestCase):
             },
         }
         (run_dir / "artifacts.json").write_text(json.dumps(artifacts), encoding="utf-8")
+        (run_dir / "qc_metrics.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "conn_pilot_subject_qc_v1",
+                    "thresholds": {"global_signal_z": 3, "motion_mm": 0.5},
+                    "subjects": {
+                        "subject_id": "sub-001",
+                        "volume_count": 160,
+                        "outlier_count": 4,
+                        "outlier_percent": 2.5,
+                        "global_signal_z_max": 3.2,
+                        "motion_max_mm": 0.61,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         self.service.store.update(job_id, "succeeded", return_code=0)
         results = self.service.list_results(job_id)
         qc = self.service.get_qc_summary(job_id)
         self.assertEqual(results["data"]["artifacts"]["counts"]["qc_images"], 1)
         self.assertTrue(qc["data"]["technical_completeness"]["passed"])
         self.assertEqual(qc["data"]["subjects"][0]["subject_id"], "sub-001")
+        self.assertEqual(qc["data"]["subjects"][0]["metrics"]["outlier_count"], 4)
+        self.assertEqual(qc["data"]["art_thresholds"]["motion_mm"], 0.5)
         self.assertTrue(qc["data"]["scientific_qc"]["review_required"])
 
     def test_generic_execute_dispatches_json_requests(self) -> None:

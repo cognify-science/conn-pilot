@@ -1,0 +1,318 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cognify.science/schemas/pipeline_instance_v1.schema.json",
+  "title": "CONN literature pipeline instance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "instance_id",
+    "instance_scope",
+    "paper",
+    "classification",
+    "software_environment",
+    "graph",
+    "review",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "pipeline_instance_v1"
+    },
+    "instance_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "instance_scope": {
+      "enum": [
+        "provisional_paper_level",
+        "single_pipeline",
+        "paper_branch"
+      ]
+    },
+    "paper": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pmid",
+        "title"
+      ],
+      "properties": {
+        "pmid": {
+          "type": "string"
+        },
+        "pmcid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "doi": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "year": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_family",
+        "normalization_status"
+      ],
+      "properties": {
+        "primary_family": {
+          "type": "string"
+        },
+        "study_design": {},
+        "modality_or_task": {},
+        "normalization_status": {
+          "enum": [
+            "legacy_deep_extraction_imported",
+            "structurally_verified",
+            "source_verified"
+          ]
+        }
+      }
+    },
+    "software_environment": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/software"
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodes",
+        "edges"
+      ],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/edge"
+          }
+        }
+      }
+    },
+    "human_confirmations": {
+      "type": "array",
+      "items": {}
+    },
+    "missing_information": {
+      "type": "array",
+      "items": {}
+    },
+    "review": {
+      "type": "object"
+    },
+    "provenance": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "software": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "evidence",
+        "source_path"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        },
+        "evidence": {
+          "enum": [
+            "explicit",
+            "inferred",
+            "not_reported",
+            "not_applicable"
+          ]
+        },
+        "source_path": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value",
+        "evidence",
+        "source_path"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {},
+        "evidence": {
+          "enum": [
+            "explicit",
+            "inferred",
+            "not_reported",
+            "not_applicable"
+          ]
+        },
+        "source_path": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "layer",
+        "component_id",
+        "execution_context",
+        "status",
+        "optional",
+        "requires",
+        "provides",
+        "parameters",
+        "source_paths"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "layer": {
+          "enum": [
+            "input_adapter",
+            "preprocessing",
+            "denoising",
+            "first_level_features",
+            "second_level_inference",
+            "qc_decision",
+            "downstream_analysis",
+            "output_export"
+          ]
+        },
+        "component_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "execution_context": {
+          "enum": [
+            "conn",
+            "external",
+            "hybrid",
+            "human"
+          ]
+        },
+        "status": {
+          "enum": [
+            "observed",
+            "specified",
+            "implemented",
+            "technically_validated",
+            "scientifically_reviewed"
+          ]
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provides": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/parameter"
+          }
+        },
+        "source_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "relation"
+      ],
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "data",
+            "control",
+            "observes",
+            "derives"
+          ]
+        }
+      }
+    }
+  }
+}

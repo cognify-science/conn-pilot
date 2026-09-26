@@ -1,0 +1,442 @@
+schema_version: pipeline_instance_v1
+instance_id: pmid_37034165_pipeline_01
+instance_scope: provisional_paper_level
+paper:
+  pmid: '37034165'
+  pmcid: PMC10076563
+  doi: 10.3389/fnins.2023.1092125
+  title: Functional connectivity MRI quality control procedures in CONN
+  year: 2023
+classification:
+  primary_family: rsfmri_qc_preprocessing_denoising
+  study_design: site comparisons and QC-FC evaluations
+  modality_or_task: resting_state_fmri_plus_anatomical_mri
+  normalization_status: structurally_verified
+software_environment:
+- name: CONN
+  version: 22.a
+  evidence: explicit
+  source_path: conn_usage.conn_version
+- name: SPM
+  version: 12 release 7771
+  evidence: explicit
+  source_path: conn_usage.spm_version
+- name: MATLAB
+  version: R2022a
+  evidence: explicit
+  source_path: conn_usage.matlab_version
+graph:
+  nodes:
+  - id: input
+    layer: input_adapter
+    component_id: functional_structural_dataset
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: modality
+      value: resting_state_fmri_plus_anatomical_mri
+      evidence: explicit
+      source_path: dataset_inputs.modality
+    - name: resting_state
+      value: true
+      evidence: explicit
+      source_path: dataset_inputs.resting_state
+    - name: task_fmri
+      value: false
+      evidence: explicit
+      source_path: dataset_inputs.task_fmri
+    - name: sample_size
+      value: 139
+      evidence: explicit
+      source_path: dataset_inputs.sample_size
+    - name: sessions
+      value: one MRI scanning session per participant
+      evidence: explicit
+      source_path: dataset_inputs.sessions
+    - name: runs
+      value: one or two resting-state functional BOLD runs
+      evidence: explicit
+      source_path: dataset_inputs.runs
+    - name: scanner_field_strength
+      value: 3.0T
+      evidence: explicit
+      source_path: dataset_inputs.scanner_field_strength
+    - name: tr
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.tr
+    - name: scan_duration
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.scan_duration
+    - name: bids_or_input_standard
+      value: BIDS v1.6.0
+      evidence: explicit
+      source_path: dataset_inputs.bids_or_input_standard
+    source_paths:
+    - dataset_inputs
+  - id: preprocessing
+    layer: preprocessing
+    component_id: reported_preprocessing
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+    parameters:
+    - name: pipeline_default_or_custom
+      value: CONN default minimal preprocessing pipeline
+      evidence: explicit
+      source_path: preprocessing.pipeline_default_or_custom
+    - name: steps
+      value:
+      - realignment_and_unwarp
+      - slice_timing_correction
+      - outlier_detection
+      - direct_functional_normalization
+      - anatomical_segmentation_and_normalization
+      - smoothing
+      evidence: explicit
+      source_path: preprocessing.steps
+    - name: normalization_space
+      value: MNI152 for functional; IXI-549 MNI for anatomical
+      evidence: explicit
+      source_path: preprocessing.normalization_space
+    - name: functional_voxel_size
+      value: 2 mm isotropic
+      evidence: explicit
+      source_path: preprocessing.functional_voxel_size
+    - name: anatomical_voxel_size
+      value: 1 mm isotropic
+      evidence: explicit
+      source_path: preprocessing.anatomical_voxel_size
+    - name: smoothing_fwhm
+      value: 8 mm
+      evidence: explicit
+      source_path: preprocessing.smoothing_fwhm
+    - name: slice_timing_correction
+      value: true
+      evidence: explicit
+      source_path: preprocessing.slice_timing_correction
+    - name: realignment_unwarp
+      value: true
+      evidence: explicit
+      source_path: preprocessing.realignment_unwarp
+    - name: outlier_detection
+      value: true
+      evidence: explicit
+      source_path: preprocessing.outlier_detection
+    source_paths:
+    - preprocessing
+  - id: denoising
+    layer: denoising
+    component_id: reported_denoising
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - preprocessed_timeseries
+    provides:
+    - denoised_timeseries
+    parameters:
+    - name: pipeline_default_or_custom
+      value: CONN fMRI default denoising pipeline
+      evidence: explicit
+      source_path: denoising.pipeline_default_or_custom
+    - name: acompcor
+      value: true
+      evidence: explicit
+      source_path: denoising.acompcor
+    - name: wm_components
+      value: 5
+      evidence: explicit
+      source_path: denoising.wm_components
+    - name: csf_components
+      value: 5
+      evidence: explicit
+      source_path: denoising.csf_components
+    - name: motion_regressors
+      value: '12 parameters: 6 realignment parameters plus first-order temporal derivatives'
+      evidence: explicit
+      source_path: denoising.motion_regressors
+    - name: scrubbing_regressors
+      value: true
+      evidence: explicit
+      source_path: denoising.scrubbing_regressors
+    - name: global_signal_regression
+      value: false
+      evidence: inferred
+      source_path: denoising.global_signal_regression
+    - name: bandpass_filter
+      value: 0.008-0.09 Hz
+      evidence: explicit
+      source_path: denoising.bandpass_filter
+    - name: detrending_or_session_effects
+      value: session effect, HRF derivative, constant session effects, linear session effects
+      evidence: explicit
+      source_path: denoising.detrending_or_session_effects
+    - name: effective_dof_reported
+      value: true
+      evidence: explicit
+      source_path: denoising.effective_dof_reported
+    source_paths:
+    - denoising
+  - id: functional_connectivity_distribution_qc
+    layer: qc_decision
+    component_id: functional_connectivity_distribution_qc
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters:
+    - name: analysis_types
+      value: &id001
+      - functional_connectivity_distribution_qc
+      - qc_fc_correlations
+      evidence: explicit
+      source_path: connectivity_analysis.analysis_types
+    - name: fc_metric
+      value: Pearson r correlation coefficients
+      evidence: explicit
+      source_path: connectivity_analysis.fc_metric
+    - name: roi_or_seed_definition
+      value: not a seed/ROI hypothesis analysis; QC used random voxels
+      evidence: explicit
+      source_path: connectivity_analysis.roi_or_seed_definition
+    - name: atlas
+      value: MNI-space gray matter template mask
+      evidence: explicit
+      source_path: connectivity_analysis.atlas
+    - name: network_or_voxel_sampling
+      value: 1,000 random voxels in MNI-space gray matter template mask
+      evidence: explicit
+      source_path: connectivity_analysis.network_or_voxel_sampling
+    source_paths:
+    - connectivity_analysis
+  - id: qc_fc_correlations
+    layer: qc_decision
+    component_id: qc_fc_correlations
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters:
+    - name: analysis_types
+      value: *id001
+      evidence: explicit
+      source_path: connectivity_analysis.analysis_types
+    - name: fc_metric
+      value: Pearson r correlation coefficients
+      evidence: explicit
+      source_path: connectivity_analysis.fc_metric
+    - name: roi_or_seed_definition
+      value: not a seed/ROI hypothesis analysis; QC used random voxels
+      evidence: explicit
+      source_path: connectivity_analysis.roi_or_seed_definition
+    - name: atlas
+      value: MNI-space gray matter template mask
+      evidence: explicit
+      source_path: connectivity_analysis.atlas
+    - name: network_or_voxel_sampling
+      value: 1,000 random voxels in MNI-space gray matter template mask
+      evidence: explicit
+      source_path: connectivity_analysis.network_or_voxel_sampling
+    source_paths:
+    - connectivity_analysis
+  - id: second_level
+    layer: second_level_inference
+    component_id: reported_statistical_model
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+    parameters:
+    - name: first_level_model
+      value: not a conventional inferential first-level model; QC-focused FC distributions
+      evidence: explicit
+      source_path: statistics.first_level_model
+    - name: second_level_model
+      value: site comparisons and QC-FC evaluations
+      evidence: explicit
+      source_path: statistics.second_level_model
+    - name: covariates
+      value:
+      - MeanMotion
+      - InvalidScans
+      - PVS
+      evidence: explicit
+      source_path: statistics.covariates
+    - name: multiple_comparison_correction
+      value: null
+      evidence: not_reported
+      source_path: statistics.multiple_comparison_correction
+    - name: machine_learning
+      value: false
+      evidence: explicit
+      source_path: statistics.machine_learning
+    source_paths:
+    - statistics
+  - id: qc
+    layer: qc_decision
+    component_id: reported_qc
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters:
+    - name: qc_reported
+      value: true
+      evidence: explicit
+      source_path: qc.qc_reported
+    - name: raw_qc
+      value: visual inspection of raw functional runs, anatomical images, JSON sidecars, and NIfTI headers
+      evidence: explicit
+      source_path: qc.raw_qc
+    - name: preprocessing_qc
+      value: visual normalization/segmentation/alignment checks plus automated QC summaries
+      evidence: explicit
+      source_path: qc.preprocessing_qc
+    - name: denoising_qc
+      value: carpetplots, DOF, BOLDstd, GCOR, FC distributions, QC-FC correlations
+      evidence: explicit
+      source_path: qc.denoising_qc
+    - name: fd_threshold
+      value: 0.5 mm
+      evidence: explicit
+      source_path: qc.fd_threshold
+    - name: global_signal_threshold
+      value: 3 standard deviations
+      evidence: explicit
+      source_path: qc.global_signal_threshold
+    - name: subject_exclusion_rule
+      value: extreme values above Q3 + 3 IQR or below Q1 - 3 IQR when low values indicate problems
+      evidence: explicit
+      source_path: qc.subject_exclusion_rule
+    - name: qc_fc
+      value: true
+      evidence: explicit
+      source_path: qc.qc_fc
+    - name: qc_success_threshold
+      value: QC-FC percent match above 95%
+      evidence: explicit
+      source_path: qc.qc_success_threshold
+    source_paths:
+    - qc
+  - id: outputs
+    layer: output_export
+    component_id: reported_outputs
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+    parameters:
+    - name: primary_success_signal
+      value: successful
+      evidence: explicit
+      source_path: outcomes.primary_success_signal
+    - name: reported_problems
+      value:
+      - site_effects_in_qc_measures
+      - low_dof_in_some_high_motion_runs
+      - need_for_visual_qc_for_borderline_cases
+      evidence: explicit
+      source_path: outcomes.reported_problems
+    - name: limitations_relevant_to_automation
+      value:
+      - visual_qc_steps_require_human_review_or_image_based_automation
+      - some exclusion decisions are judgment-based
+      - exact batch configuration is not provided in the article text
+      evidence: inferred
+      source_path: outcomes.limitations_relevant_to_automation
+    source_paths:
+    - outcomes
+  edges:
+  - from: input
+    to: preprocessing
+    relation: data
+  - from: preprocessing
+    to: denoising
+    relation: data
+  - from: denoising
+    to: functional_connectivity_distribution_qc
+    relation: data
+  - from: denoising
+    to: qc_fc_correlations
+    relation: data
+  - from: functional_connectivity_distribution_qc
+    to: second_level
+    relation: data
+  - from: qc_fc_correlations
+    to: second_level
+    relation: data
+  - from: input
+    to: qc
+    relation: observes
+  - from: denoising
+    to: qc
+    relation: observes
+  - from: functional_connectivity_distribution_qc
+    to: qc
+    relation: observes
+  - from: qc_fc_correlations
+    to: qc
+    relation: observes
+  - from: second_level
+    to: outputs
+    relation: data
+human_confirmations:
+- raw_level_visual_qc
+- normalization_and_segmentation_qc
+- carpetplot_interpretation
+- final_subject_exclusion_decisions
+missing_information:
+- exact_slice_order
+- tr_per_site_or_run
+- exact_conn_batch_script
+- exact_random_voxel_seed_for_fc_distribution
+review:
+  source_review_status: structural_methods_verified
+  legacy_schema_shape: canonical_extraction
+  split_into_multiple_instances: false
+  notes:
+  - Normalized from a legacy extraction, not re-verified against the publication.
+  - A reviewer must decide whether branches represent separate pipeline instances.
+  source_sections:
+  - Software information
+  - Preprocessing
+  - Denoising
+  - CONN quality control pipeline
+  provisional_pipeline_count: 1
+  split_decision: keep_as_single_qc_pipeline
+  confirmed_structure:
+  - BIDS data enter CONN 22.a default minimal preprocessing.
+  - Default denoising follows preprocessing and feeds raw, preprocessing and denoising QC.
+  - Visual and automated QC are cross-cutting gates rather than a terminal export step.
+  unresolved:
+  - Dataset-specific acquisition metadata and slice order vary across the multisite sample.
+  - Some exclusion decisions remain visual and judgment-based.
+  discrepancies: []
+  rejected_components: []
+provenance:
+  source_extraction_ref: test-project/conn-knowledge-builder/extractions/conn_automation/PMID37034165.yaml
+  source_extraction_sha256: 7658eb900cb856240a19f2aa180bed2bb51c39e2b7d64ef9555693f4a5f214aa
+  normalizer_version: 0.1.0
+  generated_on: '2026-09-24'

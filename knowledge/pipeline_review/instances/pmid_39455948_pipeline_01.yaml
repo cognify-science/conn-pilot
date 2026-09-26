@@ -1,0 +1,403 @@
+schema_version: pipeline_instance_v1
+instance_id: pmid_39455948_pipeline_01
+instance_scope: provisional_paper_level
+paper:
+  pmid: '39455948'
+  pmcid: PMC11515403
+  doi: null
+  title: Structural and functional sex differences in medial temporal lobe subregions at midlife
+  year: 2024
+classification:
+  primary_family: rsfmri_roi_to_roi
+  study_design: Cross-sectional resting-state fMRI and structural MRI group comparison
+  modality_or_task: null
+  normalization_status: structurally_verified
+software_environment:
+- name: CONN
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.conn_version
+- name: SPM
+  version: SPM12 r7771
+  evidence: inferred
+  source_path: conn_usage.spm_version
+  notes: Legacy extraction did not encode field-level evidence; verify against the source.
+- name: MATLAB
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.matlab_version
+graph:
+  nodes:
+  - id: input
+    layer: input_adapter
+    component_id: functional_structural_dataset
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: clinical_domain
+      value: Normative aging and Alzheimer disease risk
+      evidence: inferred
+      source_path: study_context.clinical_domain
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: design
+      value: Cross-sectional resting-state fMRI and structural MRI group comparison
+      evidence: inferred
+      source_path: study_context.design
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: groups
+      value:
+      - Women age 40-50
+      - Women age 50-60
+      - Men age 40-50
+      - Men age 50-60
+      evidence: inferred
+      source_path: study_context.groups
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: primary_question
+      value: Whether medial temporal lobe subregion volumes and functional connectivity differ by sex
+        and age at midlife.
+      evidence: inferred
+      source_path: study_context.primary_question
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - study_context
+  - id: preprocessing
+    layer: preprocessing
+    component_id: reported_preprocessing
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+    parameters:
+    - name: steps
+      value:
+      - Realignment with correction for susceptibility distortion interactions
+      - Slice timing correction
+      - Outlier detection
+      - Direct segmentation
+      - MNI-space normalization
+      - Spatial smoothing
+      evidence: inferred
+      source_path: conn_usage.preprocessing.steps
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: smoothing_fwhm_mm
+      value: 6
+      evidence: inferred
+      source_path: conn_usage.preprocessing.smoothing_fwhm_mm
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.preprocessing
+  - id: denoising
+    layer: denoising
+    component_id: reported_denoising
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - preprocessed_timeseries
+    provides:
+    - denoised_timeseries
+    parameters:
+    - name: description
+      value: Standard CONN denoising pipeline
+      evidence: inferred
+      source_path: conn_usage.denoising.description
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: confounds
+      value:
+      - White matter noise components
+      - CSF noise components
+      - Head motion
+      - Scrubbing effects
+      evidence: inferred
+      source_path: conn_usage.denoising.confounds
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: missing_details
+      value:
+      - Bandpass filter
+      - Number of CompCor components
+      - Outlier thresholds
+      - Global signal handling
+      evidence: inferred
+      source_path: conn_usage.denoising.missing_details
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.denoising
+  - id: roi_to_roi
+    layer: first_level_features
+    component_id: roi_to_roi
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: first_level
+      value: ROI-to-ROI connectivity matrices
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.first_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: connectivity_measure
+      value: Pearson correlation
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.connectivity_measure
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: confound_control
+      value: Partial correlation used to control for head motion and physiological noise
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.confound_control
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: primary_rois
+      value: &id001
+      - Bilateral parahippocampal cortex
+      - Bilateral posterior hippocampus
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.primary_rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_source
+      value: NeuroVault collection 3731, approximating automated MTL segmentations
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.roi_source
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: group_model
+      value: General Linear Model
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.group_model
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: groups
+      value: &id002
+      - Women 40-50
+      - Women 50-60
+      - Men 40-50
+      - Men 50-60
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.groups
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: thresholds.voxel_level
+      value: p < 0.001
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.thresholds.voxel_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: thresholds.cluster_size
+      value: p-FDR < 0.05
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.thresholds.cluster_size
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.roi_to_roi
+  - id: falff
+    layer: first_level_features
+    component_id: falff
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: performed
+      value: true
+      evidence: inferred
+      source_path: conn_usage.falff.performed
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: level
+      value: Voxel-level fALFF, then extracted for MTL ROIs
+      evidence: inferred
+      source_path: conn_usage.falff.level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: rois
+      value: &id003
+      - Parahippocampal cortex
+      - Posterior hippocampus
+      evidence: inferred
+      source_path: conn_usage.falff.rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: downstream_statistics
+      value: ANOVA in R with Bonferroni correction
+      evidence: inferred
+      source_path: conn_usage.falff.downstream_statistics
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.falff
+  - id: second_level
+    layer: second_level_inference
+    component_id: embedded_group_inference
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+    parameters:
+    - name: roi_to_roi.first_level
+      value: ROI-to-ROI connectivity matrices
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.first_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.connectivity_measure
+      value: Pearson correlation
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.connectivity_measure
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.confound_control
+      value: Partial correlation used to control for head motion and physiological noise
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.confound_control
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.primary_rois
+      value: *id001
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.primary_rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.roi_source
+      value: NeuroVault collection 3731, approximating automated MTL segmentations
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.roi_source
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.group_model
+      value: General Linear Model
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.group_model
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.groups
+      value: *id002
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.groups
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.thresholds.voxel_level
+      value: p < 0.001
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.thresholds.voxel_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: roi_to_roi.thresholds.cluster_size
+      value: p-FDR < 0.05
+      evidence: inferred
+      source_path: conn_usage.roi_to_roi.thresholds.cluster_size
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: falff.performed
+      value: true
+      evidence: inferred
+      source_path: conn_usage.falff.performed
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: falff.level
+      value: Voxel-level fALFF, then extracted for MTL ROIs
+      evidence: inferred
+      source_path: conn_usage.falff.level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: falff.rois
+      value: *id003
+      evidence: inferred
+      source_path: conn_usage.falff.rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: falff.downstream_statistics
+      value: ANOVA in R with Bonferroni correction
+      evidence: inferred
+      source_path: conn_usage.falff.downstream_statistics
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage
+  - id: human_review
+    layer: qc_decision
+    component_id: human_confirmation_gate
+    execution_context: human
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters: []
+    source_paths:
+    - automation_assessment.cannot_automate_reliably_without_human_confirmation
+  - id: outputs
+    layer: output_export
+    component_id: reported_outputs
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+    parameters: []
+    source_paths:
+    - results_relevant_to_automation
+  edges:
+  - from: input
+    to: preprocessing
+    relation: data
+  - from: preprocessing
+    to: denoising
+    relation: data
+  - from: denoising
+    to: roi_to_roi
+    relation: data
+  - from: denoising
+    to: falff
+    relation: data
+  - from: roi_to_roi
+    to: second_level
+    relation: data
+  - from: falff
+    to: second_level
+    relation: data
+  - from: denoising
+    to: human_review
+    relation: observes
+  - from: roi_to_roi
+    to: human_review
+    relation: observes
+  - from: falff
+    to: human_review
+    relation: observes
+  - from: second_level
+    to: outputs
+    relation: data
+human_confirmations:
+- Exact CONN version
+- Bandpass filter and denoising parameter details
+- Exact NeuroVault ROI files
+- Full acquisition parameters
+- Whether ROI-to-ROI was restricted to MTL-to-whole-brain or all pairwise ROI connections
+missing_information:
+- Bandpass filter
+- Number of CompCor components
+- Outlier thresholds
+- Global signal handling
+review:
+  source_review_status: structural_methods_verified
+  legacy_schema_shape: custom_deep_extraction
+  split_into_multiple_instances: false
+  notes:
+  - Normalized from a legacy extraction, not re-verified against the publication.
+  - A reviewer must decide whether branches represent separate pipeline instances.
+  source_sections:
+  - MTL connectivity processing
+  - ROI-to-ROI analyses
+  - fALFF analyses
+  provisional_pipeline_count: 1
+  split_decision: keep_shared_processing_with_roi_and_falff_branches
+  confirmed_structure:
+  - CONN preprocessing and denoising feed ROI-to-ROI and fALFF branches.
+  - fALFF ROI summaries feed an external R ANOVA with Bonferroni correction.
+  - Structural segmentation has separate provenance and supplies related MTL definitions.
+  unresolved:
+  - CONN version, band-pass range, CompCor component counts and outlier thresholds are absent.
+  - The reported ROI-to-ROI whole-brain threshold description needs scientific interpretation.
+  discrepancies: []
+  rejected_components: []
+provenance:
+  source_extraction_ref: test-project/conn-knowledge-builder/extractions/conn_automation/PMID39455948.yaml
+  source_extraction_sha256: a53f6f4c32e1c4ce3c394161b70eb7afd3015a8916d194e736eff4f0fd4face4
+  normalizer_version: 0.1.0
+  generated_on: '2026-09-24'

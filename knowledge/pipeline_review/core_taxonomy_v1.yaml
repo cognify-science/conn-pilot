@@ -1,0 +1,137 @@
+schema_version: conn_pipeline_taxonomy_v1
+status: evidence_based_v1
+basis:
+  corpus_papers: 138
+  structurally_reviewed_papers: 45
+  completed_core_stratum: 25
+  completed_stratified_sample: 45
+  scope: >-
+    Structural taxonomy for composing and validating literature-derived CONN
+    workflows. Frequencies are descriptive and do not define scientific defaults.
+
+pipeline_dimensions:
+  acquisition_mode:
+    values: [resting_state, task, mixed_rest_and_task]
+  modality:
+    values: [functional_mri, structural_mri, diffusion_mri, multimodal]
+  preprocessing_owner:
+    values: [conn, external_spm, external_fmriprep_or_fsl, hybrid]
+  study_design:
+    values: [group_comparison, dimensional_association, longitudinal, task_condition_contrast, predictive_modeling]
+  seed_or_roi_origin:
+    values: [atlas_defined, coordinate_defined, structural_result_derived, functional_result_derived, participant_specific, group_specific]
+
+layers:
+  - input_adapter
+  - preprocessing
+  - denoising
+  - first_level_features
+  - second_level_inference
+  - qc_decision
+  - downstream_analysis
+  - output_export
+
+component_families:
+  input_and_import:
+    - functional_structural_dataset
+    - fmriprep_derivatives_import
+    - spm_project_import
+    - conn_external_project_import
+  preprocessing_and_denoising:
+    - reported_preprocessing
+    - external_spm_preprocessing
+    - reported_denoising
+  structural_and_auxiliary:
+    - structural_vbm
+    - cortical_morphometry
+    - cortical_complexity
+    - lesion_mapping
+    - diffusion_connectometry
+    - cortical_parcellation
+    - functional_parcellation
+  connectivity_and_features:
+    - seed_to_voxel
+    - seed_to_seed
+    - roi_to_roi
+    - roi_to_voxel
+    - voxel_to_voxel_or_mvpa
+    - ica_or_dual_regression
+    - graph_theory
+    - alff_or_falff
+    - ppi_or_gppi
+    - interhemispheric_homotopic_connectivity
+    - task_activation_glm
+    - functional_network_connectivity
+    - neuromark_ica
+    - dynamic_connectivity
+  inference_and_downstream:
+    - reported_statistical_model
+    - embedded_group_inference
+    - clinical_correlation
+    - machine_learning_classification
+  quality_and_export:
+    - reported_qc
+    - human_confirmation_gate
+    - reported_outputs
+
+composition_patterns:
+  - id: conn_native
+    description: CONN owns preprocessing, denoising, connectivity and group inference.
+  - id: external_preprocessing_import
+    description: SPM, fMRIPrep or FSL preprocesses data before import into CONN.
+  - id: parallel_analysis_branches
+    description: Shared processing feeds two or more independent feature analyses.
+  - id: structural_result_derived_seed
+    description: A structural result or segmentation generates a later functional seed.
+  - id: functional_result_derived_seed_or_roi
+    description: MVPA, ROI-to-ROI or another functional result generates a follow-up seed or ROI.
+  - id: multimodal_linked_pipelines
+    description: Modality-specific pipelines remain separate and meet in statistical interpretation.
+  - id: mixed_rest_task
+    description: Resting-state and task analyses share subjects, seeds or downstream comparison.
+  - id: conn_features_external_downstream
+    description: CONN outputs feed clinical statistics, graph processing or machine learning outside CONN.
+
+edge_relations:
+  data: The upstream artifact is a required input.
+  derives: The upstream result defines a downstream seed, ROI, mask or scope.
+  observes: A QC component inspects the upstream artifact.
+  control: A decision or approval gates downstream execution.
+
+required_component_contract:
+  - component_id
+  - layer
+  - execution_context
+  - typed_inputs
+  - typed_outputs
+  - parameters_with_evidence
+  - software_environment
+  - provenance
+  - validation_rules
+  - qc_hooks
+
+evidence_states:
+  source_verified: Confirmed against the publication methods.
+  legacy_extracted: Candidate from historical extraction pending source review.
+  not_detected: No supporting evidence after the applicable review stage.
+  unresolved: Conflicting or insufficient reporting requiring human review.
+
+scientific_guardrails:
+  - Never infer a recommended parameter from frequency alone.
+  - Preserve omitted parameters as missing instead of substituting defaults silently.
+  - Distinguish atlas-fixed, participant-specific, group-specific and result-derived masks.
+  - Require explicit confirmation when a downstream ROI or seed depends on upstream results.
+  - Treat acquisition or scanner differences as modeled provenance, not incidental metadata.
+  - Keep modality-specific pipelines separate when they only converge in statistical interpretation.
+
+specialized_contracts:
+  dynamic_connectivity:
+    required: [window_width, taper, step, state_estimator, state_count_selection, sensitivity_analysis, temporal_metrics]
+  graph_theory:
+    required: [matrix_type, edge_threshold, signed_edge_policy, weighted_or_binary, metric_set, threshold_sensitivity]
+  longitudinal:
+    required: [subject_pairing, sessions, intervals, condition_encoding, missing_session_policy, repeated_measure_contrasts]
+  task_connectivity:
+    required: [conditions, hrf_weighting, psychological_regressor, connectivity_model, temporal_filter_policy]
+  result_derived_regions:
+    required: [derivation_input, derivation_rule, frozen_mask_artifact, independence_or_circularity_review]

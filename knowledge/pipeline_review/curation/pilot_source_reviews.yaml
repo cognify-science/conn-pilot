@@ -1,0 +1,1754 @@
+schema_version: pilot_source_reviews_v1
+review_date: '2026-09-22'
+review_scope: >-
+  Structural verification of the reported methods against locally archived full
+  text. This is not yet a complete parameter-level scientific appraisal.
+reviews:
+  '37034165':
+    primary_family: rsfmri_qc_preprocessing_denoising
+    source_sections:
+      - Software information
+      - Preprocessing
+      - Denoising
+      - CONN quality control pipeline
+    provisional_pipeline_count: 1
+    split_decision: keep_as_single_qc_pipeline
+    confirmed_structure:
+      - BIDS data enter CONN 22.a default minimal preprocessing.
+      - Default denoising follows preprocessing and feeds raw, preprocessing and denoising QC.
+      - Visual and automated QC are cross-cutting gates rather than a terminal export step.
+    unresolved:
+      - Dataset-specific acquisition metadata and slice order vary across the multisite sample.
+      - Some exclusion decisions remain visual and judgment-based.
+    discrepancies: []
+
+  '37162700':
+    primary_family: longitudinal_pre_post
+    source_sections:
+      - Preprocessing
+      - Region of interest-to-region of interest analysis
+      - Seed-to-voxel (Whole Brain) analysis
+      - Models of analyses
+    provisional_pipeline_count: 1
+    split_decision: keep_shared_preprocessing_with_parallel_analysis_branches
+    confirmed_structure:
+      - fMRIPrep and FSL processing precede import into CONN.
+      - CONN smoothing and denoising feed parallel ROI-to-ROI and seed-to-voxel branches.
+      - Both branches feed longitudinal factorial intervention comparisons.
+    unresolved:
+      - Exact session and condition encoding in the CONN project is not reported.
+      - Acquisition parameters and executable batch configuration remain incomplete.
+    discrepancies:
+      - The legacy index labels the family as unclear, while the methods support longitudinal_pre_post.
+
+  '37371347':
+    primary_family: task_fmri_connectivity
+    source_sections:
+      - 2.3. Data Analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_conn_connectivity_pipeline_with_linked_external_task_analyses
+    confirmed_structure:
+      - SPM12 performs task preprocessing and first-level GLM before CONN import.
+      - CONN reuses SPM.mat, denoises the data and performs ROI-to-ROI connectivity.
+      - Percent signal change and laterality are external linked analyses.
+    unresolved:
+      - Exact CONN version and the 23 ROI labels are absent.
+      - Task-condition mapping and CONN statistical thresholds require confirmation.
+    discrepancies: []
+
+  '38161799':
+    primary_family: rsfmri_seed_to_voxel
+    source_sections:
+      - Study participants
+      - Seed-to-voxel connectivity analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_as_single_seed_to_voxel_pipeline
+    confirmed_structure:
+      - CONN default volume preprocessing and aCompCor denoising precede seed-to-voxel analysis.
+      - Bilateral thalamus seeds feed group comparisons and symptom regressions.
+    unresolved:
+      - CONN version and exact outlier thresholds are not reported.
+      - Several second-level models are described narratively rather than as a reusable design matrix.
+    discrepancies: []
+
+  '38731091':
+    primary_family: rsfmri_graph_theory
+    source_sections:
+      - 2.5. Data Pre-Processing
+      - 2.6. ROI-to-ROI Analysis
+      - 2.7. Seed-to-Voxel Analysis
+      - 2.8. Graph Theoretical Analysis
+      - 2.9. Correlation with the Modified Borg Scale
+    provisional_pipeline_count: 1
+    split_decision: keep_as_one_conditional_dag
+    confirmed_structure:
+      - Shared CONN preprocessing and denoising feed ROI-to-ROI analysis.
+      - ROI-to-ROI findings help select seed-to-voxel seeds and graph-theory scope.
+      - Clinical correlation is a downstream external analysis.
+    derived_edges:
+      - from_component: roi_to_roi
+        to_component: seed_to_voxel
+        relation: derives
+      - from_component: roi_to_roi
+        to_component: graph_theory
+        relation: derives
+    unresolved:
+      - Exact ART global-signal threshold is not extractable from the methods text.
+      - The condition/run encoding for normal and effort breathing needs confirmation.
+    discrepancies: []
+
+  '38889524':
+    primary_family: clinical_group_comparison
+    source_sections:
+      - Data processing
+      - Pre-processing for intra-network rs-fMRI data analysis
+      - Intra-network rs-fMRI data analysis
+      - Pre-processing for inter-network rs-fMRI data analysis
+      - Inter-network rs-fMRI data analysis
+    provisional_pipeline_count: 2
+    split_decision: split_fsl_intra_network_from_conn_inter_network
+    confirmed_structure:
+      - One branch uses FSL ICA, FIX and dual regression for intra-network analysis.
+      - A separate branch uses CONN 21a, MVPA-derived seeds, ROI-to-voxel and ROI-to-ROI analyses.
+      - The branches share a scientific comparison but use different preprocessing and inference stacks.
+    execution_context_overrides:
+      fsl_dual_regression_intra_network: external
+    unresolved:
+      - The current provisional graph must be split into two linked instances.
+      - Exact ART thresholds and MVPA ROI-generation parameters remain incomplete.
+    discrepancies:
+      - The legacy single-record extraction hides two distinct executable pipelines.
+
+  '39455948':
+    primary_family: rsfmri_roi_to_roi
+    source_sections:
+      - MTL connectivity processing
+      - ROI-to-ROI analyses
+      - fALFF analyses
+    provisional_pipeline_count: 1
+    split_decision: keep_shared_processing_with_roi_and_falff_branches
+    confirmed_structure:
+      - CONN preprocessing and denoising feed ROI-to-ROI and fALFF branches.
+      - fALFF ROI summaries feed an external R ANOVA with Bonferroni correction.
+      - Structural segmentation has separate provenance and supplies related MTL definitions.
+    unresolved:
+      - CONN version, band-pass range, CompCor component counts and outlier thresholds are absent.
+      - The reported ROI-to-ROI whole-brain threshold description needs scientific interpretation.
+    discrepancies: []
+
+  '41306624':
+    primary_family: machine_learning_features
+    source_sections:
+      - Image data preprocessing
+      - Brain mapping
+      - Feature extraction
+      - Feature selection using genetic algorithm
+      - Compare the performance of models
+    provisional_pipeline_count: 1
+    split_decision: keep_conn_feature_generation_linked_to_external_ml
+    confirmed_structure:
+      - CONN preprocessing precedes graph metrics for 15 ROIs and four task conditions.
+      - Graph metrics and demographics form 420 candidate features.
+      - Genetic feature selection and classifier comparison are external downstream stages.
+    unresolved:
+      - ROI definitions, denoising, connectivity metric and graph threshold are not sufficiently reported.
+      - It is unclear whether feature selection is nested inside cross-validation.
+    discrepancies:
+      - Classification accuracy differs between the results table and discussion text; it cannot be used as a benchmark without resolution.
+
+  '39333843':
+    primary_family: rsfmri_voxel_to_voxel
+    source_sections:
+      - Data preparation and statistical analysis
+      - Data preprocessing
+      - Denoising
+      - Quality control assessment
+      - Multivariate pattern analysis
+      - Seed-based analysis
+      - Secondary analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_as_one_data_driven_analysis_chain
+    verified_analysis_components:
+      - component_id: voxel_to_voxel_or_mvpa
+        source_path: connectivity_analysis
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: voxel_to_voxel_or_mvpa
+        to_component: seed_to_voxel
+        relation: derives
+      - from_component: seed_to_voxel
+        to_component: roi_to_roi
+        relation: derives
+    confirmed_structure:
+      - CONN 22.a default preprocessing and denoising feed an eight-component fc-MVPA group comparison.
+      - The fc-MVPA cluster becomes a seed for a post hoc seed-based analysis.
+      - Clusters from the data-driven chain become ROIs for a secondary ROI-to-ROI comparison with controls.
+    unresolved:
+      - Data-derived seeds and ROIs are run outputs and must not be represented as fixed reusable atlas inputs.
+    discrepancies:
+      - The legacy rsfmri_seed_to_voxel label hides the preceding fc-MVPA stage and following ROI-to-ROI stage.
+      - Legacy dynamic and graph labels are keyword false positives.
+
+  '41707453':
+    primary_family: rsfmri_seed_to_voxel
+    software_overrides:
+      CONN: 22.v2407
+      SPM: '12.7771'
+    source_sections:
+      - MRI preprocessing
+      - First-level analysis
+      - Second-level analyses
+    provisional_pipeline_count: 1
+    split_decision: keep_as_single_atlas_wide_seed_to_voxel_pipeline
+    verified_analysis_components:
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    confirmed_structure:
+      - CONN 22.v2407 and SPM 12.7771 perform fieldmap-aware preprocessing and standard denoising.
+      - Seed-based maps are computed for 164 atlas and network seeds.
+      - Group by prepulse-inhibition interaction models are corrected across voxels and parallel seed analyses.
+    unresolved:
+      - The exact default-atlas release should be versioned for reproducible seed labels.
+    discrepancies:
+      - The legacy extraction incorrectly reports the CONN version as missing.
+      - PPI means prepulse inhibition in this paper and is not psychophysiological interaction analysis.
+      - Legacy dynamic and graph labels are keyword false positives.
+
+  '41680601':
+    primary_family: rsfmri_seed_to_voxel
+    software_overrides:
+      CONN: 22a
+      SPM: '12'
+    source_sections:
+      - Functional MRI data preprocessing
+      - Functional connectivity analysis
+      - Statistical analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_as_single_seed_to_voxel_group_pipeline
+    verified_analysis_components:
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    confirmed_structure:
+      - CONN 22a default-style preprocessing and CompCor denoising feed seed-to-voxel analyses.
+      - Eighteen coordinate-defined seeds cover depression and anxiety circuitry.
+      - Group comparisons use age and sex covariates; significant connectivity values feed symptom correlations in SPSS.
+    unresolved:
+      - CompCor component counts and complete batch settings are not reported.
+    discrepancies:
+      - The legacy extraction incorrectly reports the CONN version as missing.
+      - Legacy graph classification is a keyword false positive.
+
+  '41390440':
+    primary_family: rsfmri_seed_to_voxel
+    software_overrides:
+      CONN: 22.a
+      SPM: '12.7771'
+      MATLAB: R2024a
+    source_sections:
+      - Data preprocessing and denoising
+      - Seed-to-voxel connectivity analysis
+      - First-level analysis
+      - Group-level analysis
+      - Statistical and correlation analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_external_fieldmap_step_linked_to_conn_seed_pipeline
+    verified_analysis_components:
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    confirmed_structure:
+      - dcm2niix conversion and FSL fieldmap estimation precede CONN 22.a preprocessing.
+      - aCompCor denoising feeds sixteen Human Brainnetome Atlas thalamic seed analyses.
+      - Group inference controls age and gender and applies correction across seeds.
+    unresolved:
+      - Exact acquisition-to-BIDS mapping and executable fieldmap handoff are not reported as a batch contract.
+    discrepancies:
+      - The legacy extraction incorrectly reports the CONN version as missing.
+      - Legacy dynamic and graph labels are keyword false positives.
+
+  '31312135':
+    primary_family: rsfmri_seed_to_voxel
+    source_sections:
+      - fMRI Analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_as_single_two_seed_group_comparison
+    verified_analysis_components:
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    confirmed_structure:
+      - CONN 17.f standard MNI preprocessing and nuisance regression feed seed-to-voxel analysis.
+      - MPFC and PCC-Precuneus Harvard-Oxford masks are the two a priori seeds.
+      - Two-sample group inference uses Fisher-transformed maps and cluster FWE correction.
+    unresolved:
+      - Smoothing FWHM is not reported.
+      - White-matter and CSF regression details are insufficient for an exact denoising batch.
+    discrepancies:
+      - Legacy graph and machine-learning labels are keyword false positives.
+
+  '40739609':
+    primary_family: multimodal_structural_seed_connectivity
+    source_sections:
+      - VBM
+      - ROI definition
+      - Rs-fMRI data analysis
+      - Statistical analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_linked_vbm_and_seed_connectivity_branches
+    verified_analysis_components:
+      - component_id: structural_vbm
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: structural_vbm
+        to_component: seed_to_voxel
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 3 × 3 × 3 mm
+      - component_id: reported_preprocessing
+        name: art_motion_threshold
+        value: '> 3 mm'
+      - component_id: reported_preprocessing
+        name: art_global_signal_threshold
+        value: z > 12
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.01–0.08 Hz
+    confirmed_structure:
+      - DPARSF voxel-based morphometry identifies a left-insula gray-matter cluster, while the right-insula seed is selected independently from AAL.
+      - The structural result and atlas definition produce two 10 mm spherical seeds for CONN 18 seed-to-voxel analysis.
+      - CONN preprocessing, CompCor denoising and 0.01–0.08 Hz filtering feed three-group inference and PAS correlations.
+    unresolved:
+      - The executable handoff from the DPARSF VBM result to the left-insula seed is not supplied.
+      - The exact DPARSF release and CONN batch files are unavailable.
+    discrepancies:
+      - The legacy dynamic label is a keyword false positive.
+      - The legacy extraction omitted the explicitly reported band-pass filter and the dependency between VBM and seed definition.
+
+  '28880891':
+    primary_family: rsfmri_seed_to_voxel
+    software_overrides:
+      CONN: '15'
+      SPM: '8'
+    source_sections:
+      - Resting-state fMRI preprocessing
+      - Seed-based connectivity analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_as_single_right_insula_seed_pipeline
+    verified_analysis_components:
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+    confirmed_structure:
+      - CONN 15 with SPM8 defaultMNI preprocessing and 8 mm smoothing feeds aCompCor denoising and 0.008–0.09 Hz filtering.
+      - An 8 mm spherical right dorsal anterior insula seed feeds seed-to-voxel correlation and Fisher transformation.
+      - Corrected group comparisons feed external regressions against clinical measures with age and depression controls.
+    unresolved:
+      - The exact ART and censoring regressors are not available as an executable batch.
+      - MATLAB version and complete cluster correction settings are not fully reported.
+    discrepancies:
+      - The legacy extraction missed the explicitly reported CONN 15 version and 8 mm smoothing kernel.
+      - Legacy dynamic and graph labels are keyword false positives.
+
+  '39380071':
+    primary_family: multimodal_structural_seed_connectivity
+    software_overrides:
+      CAT12: rs1720
+      SPM: '12'
+    source_sections:
+      - Magnetic resonance imaging (MRI): data acquisition and pre-processing
+      - Cortical complexity analysis
+      - Functional brain connectivity analysis
+      - Statistical analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_linked_cortical_complexity_and_seed_connectivity_branches
+    verified_analysis_components:
+      - component_id: cortical_complexity
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: cortical_complexity
+        to_component: seed_to_voxel
+        relation: derives
+    parameter_overrides:
+      - component_id: cortical_complexity
+        name: smoothing_fwhm
+        value: 20 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 4 mm
+    confirmed_structure:
+      - CAT12 cortical-complexity analysis precedes functional analysis and identifies superior-temporal-sulcus regions linked to autistic-like traits.
+      - Matching left and right STSvp regions from the Glasser360 atlas become seeds for CONN seed-to-voxel analysis.
+      - CONN default denoising and a valid-scan QC gate feed covariate-adjusted regressions with cluster FWE correction.
+    unresolved:
+      - CONN version, denoising regressors and frequency filter are not reported.
+      - The exact mapping rule from cortical-complexity clusters to Glasser360 parcels is narrative rather than executable.
+    discrepancies:
+      - The legacy graph label is a keyword false positive.
+      - The legacy single-family label hides the structural analysis that determines the functional seeds.
+
+  '32189856':
+    primary_family: task_fmri_connectivity
+    software_overrides:
+      CONN: 16p
+      SPM: '8'
+    source_sections:
+      - Magnetic resonance imaging protocol and analysis
+      - Functional connectivity analysis
+      - Preprocessing and ROI selection
+    provisional_pipeline_count: 1
+    split_decision: keep_shared_task_processing_with_roi_and_seed_branches
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.08 Hz
+      - component_id: reported_denoising
+        name: global_signal_regression
+        value: false
+    confirmed_structure:
+      - Task activations from the active verb-generation phase define six bilateral language ROIs.
+      - CONN 16p and SPM8 preprocessing with CompCor and 0.008–0.08 Hz filtering feeds parallel ROI-to-ROI and seed-to-voxel task-condition analyses.
+      - Fisher-transformed connectivity enters group comparison and external neuropsychological associations.
+    unresolved:
+      - The task design and condition regressors are not described sufficiently to reproduce the first-level model.
+      - Motion thresholds and the exact twelve ROI masks are not available as reusable files.
+    discrepancies:
+      - The legacy resting-state family is incorrect; the methods explicitly analyze an active task condition.
+      - The legacy extraction reverses the explicit statement that global-signal regression was not applied.
+      - Legacy graph and machine-learning labels are keyword false positives.
+
+  '41300141':
+    primary_family: mixed_rest_task_connectivity
+    software_overrides:
+      CONN: 22a
+    source_sections:
+      - 2.2. Procedure
+      - 2.5. Analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_shared_seeds_with_parallel_rest_and_task_ppi_branches
+    verified_analysis_components:
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+      - component_id: ppi_or_gppi
+        source_path: review.source_sections
+    parameter_overrides:
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: not used
+        notes: Explicitly omitted to avoid losing task functional data.
+    confirmed_structure:
+      - CONN 22a atlas-defined mPFC and left-hippocampus seeds are shared by resting-state and task analyses.
+      - Resting runs use seed-based whole-brain connectivity, while task runs use PPI for specified goal-priming conditions and contrasts.
+      - The parallel branches feed FDR-corrected within-group and MDD-versus-control inference and are compared qualitatively.
+    unresolved:
+      - Smoothing FWHM, nuisance regressors, motion thresholds, SPM version and MATLAB version are not reported.
+      - The paper does not provide the executable condition vectors or CONN project.
+    discrepancies:
+      - The legacy graph label is a keyword false positive.
+      - The legacy seed-to-voxel family hides the genuine task PPI branch and the mixed rest/task design.
+
+  '40916901':
+    primary_family: rsfmri_seed_and_roi_connectivity
+    software_overrides:
+      SPM: '12'
+      MATLAB: R2021b
+    source_sections:
+      - Lesion Mapping
+      - Resting State fMRI
+      - Statistical Analyses
+    provisional_pipeline_count: 1
+    split_decision: keep_lesion_mapping_linked_to_seed_and_roi_connectivity
+    rejected_components:
+      - graph_theory
+      - machine_learning
+    verified_analysis_components:
+      - component_id: lesion_mapping
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: seed_to_seed
+        source_path: connectivity_analysis
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: lesion_mapping
+        to_component: reported_statistical_model
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: art_motion_threshold
+        value: 0.9 mm translation
+      - component_id: reported_preprocessing
+        name: art_global_signal_threshold
+        value: z > 5
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 6 mm
+    confirmed_structure:
+      - Manual lesion masks are normalized with SPM12 and supply lesion side, volume and visual quality information.
+      - Standard CONN preprocessing and visual inspection feed seed-to-seed correlations between hippocampus and six ipsilateral targets.
+      - Bilateral hippocampal seeds also feed whole-brain seed-to-voxel permutation contrasts, followed by cognitive correlations outside CONN.
+    unresolved:
+      - CONN version, temporal filter and exact white-matter/CSF regression model are not reported.
+      - Scanner harmonization is handled as a covariate rather than through an explicit harmonization component.
+    discrepancies:
+      - Legacy graph and machine-learning labels are keyword false positives.
+      - The legacy seed-to-voxel label omits the seed-to-seed branch and manual lesion-mapping dependency.
+
+  '41652332':
+    primary_family: multimodal_structural_seed_connectivity
+    software_overrides:
+      CONN: 23.a
+      SPM: '12'
+      FreeSurfer: 7.4.1
+    source_sections:
+      - Structural MRI analysis
+      - Functional connectivity analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_linked_morphometry_and_parallel_connectivity_branches
+    rejected_components:
+      - dynamic_connectivity
+      - graph_theory
+      - machine_learning
+    verified_analysis_components:
+      - component_id: cortical_morphometry
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: cortical_morphometry
+        to_component: roi_to_roi
+        relation: derives
+      - from_component: cortical_morphometry
+        to_component: seed_to_voxel
+        relation: derives
+    parameter_overrides:
+      - component_id: cortical_morphometry
+        name: smoothing_fwhm
+        value: 10 mm
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 3 × 3 × 3 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+    confirmed_structure:
+      - FreeSurfer cortical-thickness and subcortical-volume analyses identify right IFG and left SFG structural differences.
+      - Those structural findings define two seeds for CONN 23.a functional connectivity.
+      - Shared preprocessing and denoising feed reported ROI-target and seed-to-voxel analyses, group contrasts and clinical GLMs.
+    unresolved:
+      - The methods alternate between ROI-to-ROI targets and correlations with all brain voxels, so the exact executed CONN analysis spaces require project-level confirmation.
+      - ART thresholds, CompCor component counts and MATLAB version are not reported.
+    discrepancies:
+      - The legacy extraction misses CONN 23.a, FreeSurfer 7.4.1 and the explicitly reported 8 mm functional smoothing kernel.
+      - Legacy dynamic, graph and machine-learning labels are keyword false positives.
+
+  '38893128':
+    primary_family: task_fmri_connectivity
+    software_overrides:
+      CONN: 22.a
+      SPM: '12'
+      MATLAB: R2020a
+    source_sections:
+      - 2.3. Paradigms
+      - 2.4. Data Analysis
+      - 2.5. Statistical Analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_shared_spm_processing_with_activation_and_conn_branches
+    execution_context_overrides:
+      reported_preprocessing: external
+    rejected_components:
+      - conn_preprocessing
+      - dynamic_connectivity
+      - graph_theory
+    verified_analysis_components:
+      - component_id: task_activation_glm
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+    confirmed_structure:
+      - SPM12 preprocesses motor-task fMRI and runs a task GLM feeding MarsBaR percent-signal-change measurements.
+      - The same preprocessed task images are imported into CONN 22.a and denoised before fourteen-network-seed whole-brain connectivity analyses.
+      - Task activation and seed-to-voxel connectivity are parallel branches compared between metastasis patients and matched HCP controls.
+    unresolved:
+      - Patient and control acquisitions, motor paradigms and run structures differ substantially and are not represented by a formal harmonization step.
+      - The effect of applying a resting-style temporal band-pass filter to task data requires scientific appraisal.
+    discrepancies:
+      - The legacy clinical-group family hides that both branches operate on task fMRI.
+      - Legacy dynamic and graph labels are keyword false positives.
+      - Preprocessing was performed in SPM before CONN import, not by the CONN preprocessing pipeline.
+
+  '41584758':
+    primary_family: rsfmri_roi_to_roi_with_seed_followup
+    software_overrides:
+      CONN: 22.v2407
+      SPM: 12 version 25.25.01.02
+    source_sections:
+      - Data preprocessing and analysis
+      - ROI-to-ROI analysis
+      - rsFC correlation with clinical scores
+      - Seed-to-voxel analysis (SBC)
+    provisional_pipeline_count: 1
+    split_decision: keep_roi_discovery_with_derived_seed_followup
+    rejected_components:
+      - dynamic_connectivity
+      - graph_theory
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: roi_to_roi
+        to_component: seed_to_voxel
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 2 × 2 × 2 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: reported inconsistently as 0.01–0.08 Hz and 0.008–0.09 Hz
+        notes: Both ranges appear in the methods and cannot be reconciled without the CONN project.
+    confirmed_structure:
+      - CONN 22.v2407 preprocessing and detailed nuisance regression feed an atlas-wide ROI-to-ROI matrix over 138 Harvard-Oxford ROIs.
+      - ROIs identified by the matrix comparison become seeds for post hoc whole-brain seed-to-voxel maps.
+      - Selected ROI-pair values feed external clinical correlations with age, sex and multiplicity controls.
+    unresolved:
+      - The methods report incompatible temporal-filter ranges of 0.01–0.08 Hz and 0.008–0.09 Hz.
+      - Scrubbing uses 0.9 mm in preprocessing while subject-level QA exclusion uses 0.5 mm framewise displacement; their exact relationship needs clarification.
+    discrepancies:
+      - Legacy dynamic and graph labels are keyword false positives.
+      - The legacy clinical-group family omits the data-derived seed-to-voxel follow-up dependency.
+
+  '41920959':
+    primary_family: multimodal_structural_roi_connectivity
+    software_overrides:
+      CONN: 22.a
+      SPM: '12.7771'
+      FreeSurfer: 7.4.0
+      dcm2niix: 1.0.20241211
+    source_sections:
+      - Anatomical image processing
+      - Functional image processing
+      - Statistical analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_parallel_structural_and_roi_connectivity_branches
+    rejected_components:
+      - dynamic_connectivity
+      - graph_theory
+    verified_analysis_components:
+      - component_id: cortical_morphometry
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: cortical_morphometry
+        name: smoothing_fwhm
+        value: 5 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_preprocessing
+        name: art_motion_threshold
+        value: framewise displacement > 0.9 mm
+      - component_id: reported_preprocessing
+        name: art_global_signal_threshold
+        value: BOLD change > 5 standard deviations
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+      - component_id: reported_denoising
+        name: global_signal_regression
+        value: false
+    confirmed_structure:
+      - BIDS-organized images feed a FreeSurfer cortical-thickness and subcortical-volume branch with manual quality correction.
+      - In parallel, CONN 22.a preprocessing and aCompCor denoising feed ROI-to-ROI matrices over 58 a priori atlas regions.
+      - Network-based statistics relate the ROI network to suicidal-ideation severity, while structural models test parallel dimensional associations.
+    unresolved:
+      - The full 58-ROI definition is only available in supplementary material and is not packaged as a reusable atlas file.
+      - Medication and illness-chronicity confounds are not modeled because of sample size.
+    discrepancies:
+      - The legacy extraction reports 10 mm functional smoothing, but the methods specify 5 mm for FreeSurfer and 8 mm for functional data.
+      - The legacy extraction reverses the explicit statement that global-signal regression was not applied.
+      - Legacy dynamic and graph labels are keyword false positives.
+
+  '33564081':
+    primary_family: rsfmri_roi_to_roi
+    software_overrides:
+      SPM: '12'
+    source_sections:
+      - Functional magnetic resonance imaging acquisition
+      - Functional network construction
+      - Statistical analyses
+    provisional_pipeline_count: 1
+    split_decision: keep_external_spm_processing_with_conn_roi_matrix
+    execution_context_overrides:
+      reported_preprocessing: external
+    rejected_components:
+      - conn_preprocessing
+      - graph_theory
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 4 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.08 Hz
+      - component_id: reported_qc
+        name: rms_motion_exclusion
+        value: RMS > 0.25
+    confirmed_structure:
+      - SPM12 preprocessing outside CONN feeds aCompCor nuisance regression and temporal filtering.
+      - Harvard-Oxford, Schaefer-400 and Ascending Arousal Network atlases define a 430-region ROI-to-ROI matrix.
+      - CONN GLMs evaluate food-addiction and sex contrasts; selected connections feed external clinical correlations.
+    unresolved:
+      - CONN and MATLAB versions are not reported.
+      - The exact prior preprocessing protocol is partly delegated to earlier publications.
+    discrepancies:
+      - The legacy extraction reports 0.008–0.09 Hz, while the paper states 0.008–0.08 Hz.
+      - The reported functional networks are ROI-to-ROI matrices without graph-theory metrics.
+      - The legacy clinical-group family hides the actual ROI-to-ROI analysis family.
+
+  '32651411':
+    primary_family: multimodal_structural_roi_connectivity
+    software_overrides:
+      CONN: '17'
+      SPM: '12'
+      MATLAB: R2014a
+    source_sections:
+      - Functional MRI data preprocessing
+      - Whole-brain functional connectivity analysis of large-scale networks
+      - Functional connectivity analysis of basal ganglia
+      - Structural MRI data analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_parallel_vbm_and_roi_connectivity_branches
+    rejected_components:
+      - graph_theory
+    verified_analysis_components:
+      - component_id: structural_vbm
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: initial_scans_discarded
+        value: 5
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+      - component_id: reported_qc
+        name: minimum_valid_scans
+        value: 250 of 300
+    confirmed_structure:
+      - CONN 17 preprocesses three resting-state runs and retains participants with more than 250 valid scans.
+      - A 32-ROI large-scale-network analysis and an atlas-based basal-ganglia ROI analysis feed group contrasts and impulsivity correlations.
+      - A parallel SPM12 voxel-based morphometry branch tests gray-matter differences with 8 mm smoothing.
+    unresolved:
+      - The exact intermediate ART thresholds and nuisance-regression terms are described as defaults rather than enumerated.
+      - The 32 network ROIs depend on the atlas distributed with the historical CONN release.
+    discrepancies:
+      - The legacy extraction misses the explicitly reported CONN 17 version.
+      - The paper performs ROI-to-ROI network analysis, not graph-theory analysis.
+      - The legacy clinical-group family omits the parallel VBM branch.
+
+  '40685376':
+    primary_family: multimodal_structural_seed_connectivity
+    software_overrides:
+      CONN: 21a
+      SPM: '12'
+      FreeSurfer: 7.1.1
+    source_sections:
+      - Creating average group-specific pulvinar seeds
+      - fMRI pre-processing
+      - Seed-based resting state fMRI analysis
+      - Gray matter morphometry analysis procedure
+      - Statistical analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_morphometry_derived_seed_and_volume_branches
+    rejected_components:
+      - alff_or_falff
+      - dynamic_connectivity
+      - graph_theory
+    verified_analysis_components:
+      - component_id: cortical_morphometry
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: cortical_morphometry
+        to_component: seed_to_voxel
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 6 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.01–0.09 Hz
+    confirmed_structure:
+      - FreeSurfer thalamic segmentation, SPM averaging and FSL thresholding generate eight group-specific pulvinar-subnucleus seeds.
+      - Those masks feed CONN 21a seed-to-voxel analyses with group inference controlling age and gender.
+      - FreeSurfer subnucleus volumes form a parallel morphometry output used in group tests and structure-function correlations.
+    unresolved:
+      - FSL and MATLAB versions, ART thresholds and exact aCompCor component counts are not reported.
+      - Separate group-specific seed masks may affect between-group comparability and require scientific review before reuse as a recommended template.
+    discrepancies:
+      - The legacy extraction misses CONN 21a and FreeSurfer 7.1.1.
+      - The source reports a 0.01–0.09 Hz filter rather than the legacy 0.008–0.09 Hz value.
+      - Legacy dynamic, fALFF and graph labels are keyword false positives.
+
+  '34069930':
+    primary_family: task_fmri_connectivity
+    software_overrides:
+      SPM: '12'
+      MATLAB: R2019a
+      CAT12: 12.7
+    source_sections:
+      - 2.2. Image Acquisition
+      - 2.3. fMRI Data Analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_shared_spm_task_processing_with_activation_and_conn_branches
+    execution_context_overrides:
+      reported_preprocessing: external
+    rejected_components:
+      - conn_preprocessing
+      - dynamic_connectivity
+      - graph_theory
+    verified_analysis_components:
+      - component_id: task_activation_glm
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 2 × 2 × 2 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+    confirmed_structure:
+      - CAT12 skull stripping stabilizes SPM12 normalization before a three-condition visual-task GLM.
+      - MarsBaR, LI toolbox and activation-derived ROIs provide percent-signal-change, cluster-size and lateralization outputs.
+      - The SPM project is imported into CONN; denoising feeds ROI-to-ROI connectivity over 23 network ROIs.
+    unresolved:
+      - CONN version is not reported.
+      - Patient and control data use different scanners, coils, voxel sizes and fixation stimuli without a formal harmonization component.
+    discrepancies:
+      - The legacy extraction confuses 2 mm resampling with smoothing; the reported smoothing kernel is 8 mm.
+      - The legacy clinical-group family hides the task activation and task-connectivity structure.
+      - Legacy dynamic and graph labels are keyword false positives.
+
+  '41088383':
+    primary_family: multimodal_structural_diffusion_homotopic_connectivity
+    software_overrides:
+      SPM: '12'
+      FreeSurfer: 7.2.0
+    source_sections:
+      - Cortical and subcortical volumetric analysis
+      - DTI analysis
+      - rs-fMRI analysis
+    provisional_pipeline_count: 3
+    split_decision: represent_three_linked_modality_specific_pipelines
+    rejected_components:
+      - graph_theory
+    verified_analysis_components:
+      - component_id: cortical_morphometry
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: diffusion_connectometry
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: interhemispheric_homotopic_connectivity
+        source_path: review.source_sections
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 2 × 2 × 2 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_preprocessing
+        name: art_motion_threshold
+        value: displacement > 0.9 mm
+      - component_id: reported_preprocessing
+        name: art_global_signal_threshold
+        value: BOLD change > 5 standard deviations
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+      - component_id: reported_qc
+        name: functional_subject_exclusion
+        value: above 97th percentile of scan validity or normalization quality
+    confirmed_structure:
+      - FreeSurfer morphometry, DSI Studio connectometry and CONN interhemispheric functional connectivity are three modality-specific pipelines.
+      - The DTI branch applies QSDR, topology-informed pruning and permutation-based connectometry.
+      - The functional branch computes each voxel's Fisher-transformed correlation with its contralateral counterpart and performs age-adjusted group inference.
+    unresolved:
+      - CONN, DSI Studio, FSL and MATLAB versions are not reported.
+      - Cross-modal relationships are evaluated statistically rather than through a shared executable feature-integration stage.
+    discrepancies:
+      - Interhemispheric homotopic connectivity is a voxel-pair operation, not seed-to-voxel, ROI-to-ROI or graph theory.
+      - The legacy clinical-group family hides three modality-specific pipelines.
+
+  '32128439':
+    primary_family: rsfmri_roi_to_roi
+    software_overrides:
+      CONN: '18'
+      SPM: '12'
+    source_sections:
+      - METHOD
+    provisional_pipeline_count: 1
+    split_decision: keep_external_spm_processing_with_auditory_roi_matrix
+    execution_context_overrides:
+      reported_preprocessing: external
+    rejected_components:
+      - conn_preprocessing
+      - dynamic_connectivity
+      - graph_theory
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+      - component_id: reported_statistical_model
+        name: multiple_comparison_correction
+        value: FDR-corrected p < 0.05
+    confirmed_structure:
+      - SPM12 preprocessing outside CONN is applied to HCP and tinnitus datasets acquired with different scanners and protocols.
+      - CONN 18 computes bivariate ROI-to-ROI correlations among auditory cortical regions.
+      - Fisher-transformed edges feed age-group and tinnitus comparisons with FDR correction.
+    unresolved:
+      - Smoothing FWHM, nuisance-regression model, motion thresholds and MATLAB version are not reported.
+      - Scanner and acquisition differences are not represented by an explicit harmonization step.
+    discrepancies:
+      - The source explicitly reports FDR-corrected p < 0.05, contrary to the legacy missing-threshold flag.
+      - Legacy dynamic and graph labels are keyword false positives.
+      - The reported CONN version is 18; the legacy value 18.11 is unsupported by the methods text.
+
+  '41591135':
+    primary_family: rsfmri_roi_to_roi
+    software_overrides:
+      CONN: 22a
+      SPM: '12'
+    source_sections:
+      - 2. Materials and Methods
+    provisional_pipeline_count: 1
+    split_decision: keep_as_amygdala_subregion_roi_matrix
+    rejected_components:
+      - dynamic_connectivity
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_preprocessing
+        name: art_motion_threshold
+        value: framewise displacement > 0.9 mm
+      - component_id: reported_preprocessing
+        name: art_global_signal_threshold
+        value: BOLD change > 5 standard deviations
+      - component_id: reported_statistical_model
+        name: multiple_comparison_correction
+        value: ROI-level FDR p < 0.05
+    confirmed_structure:
+      - CONN 22a preprocessing and nuisance regression feed ROI-to-ROI matrices for six amygdala subregions plus whole-amygdala auxiliary ROIs.
+      - Atlas network ROIs provide targets across eight large-scale networks.
+      - Two-sample and multivariate cluster-level models compare schizophrenia and control groups with ROI-level FDR correction.
+    unresolved:
+      - Temporal-filter settings, CompCor component counts and MATLAB version are not reported.
+      - The exact atlas release and exported ROI definitions are not packaged with the publication.
+    discrepancies:
+      - The legacy dynamic label is a keyword false positive.
+      - The legacy clinical-group family omits the ROI-to-ROI analysis family.
+
+  '29352808':
+    primary_family: rsfmri_roi_to_roi
+    software_overrides:
+      SPM: '5'
+      FreeSurfer: 5.1.0
+      3DSlicer: '4'
+    source_sections:
+      - Image processing
+      - Functional connectivity analysis
+      - Associations with positive symptoms
+    provisional_pipeline_count: 1
+    split_decision: keep_subject_parcellation_linked_to_roi_matrix
+    execution_context_overrides:
+      reported_preprocessing: external
+    rejected_components:
+      - conn_preprocessing
+    verified_analysis_components:
+      - component_id: cortical_parcellation
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: cortical_parcellation
+        to_component: roi_to_roi
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: motion_exclusion_threshold
+        value: translation > 2 mm or rotation > 2 degrees
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+      - component_id: reported_denoising
+        name: global_signal_regression
+        value: false
+    confirmed_structure:
+      - FreeSurfer and manually corrected 3DSlicer masks generate 68 participant-level Desikan-Killiany ROIs.
+      - SPM5 and ArtRepair preprocessing precede CONN CompCor denoising without global-signal regression.
+      - A 68 × 68 ROI-to-ROI matrix feeds group, prodromal-subgroup and symptom-association analyses.
+    unresolved:
+      - CONN and MATLAB versions and CompCor component counts are not reported.
+      - The exact participant-specific ROI resampling and interpolation contract is not supplied.
+    discrepancies:
+      - The structural parcellation is an executable dependency of the functional matrix, not incidental preprocessing metadata.
+
+  '39020104':
+    primary_family: rsfmri_network_to_network
+    software_overrides:
+      CONN: 21.a
+      SPM: '12.7771'
+      MATLAB: R2021b 9.11
+      FSL: '6.0'
+      dcm2niix: 1.0.20190902
+    source_sections:
+      - Data preprocessing
+      - Data analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_roi_matrix_with_clustered_network_inference
+    rejected_components:
+      - graph_theory
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+      - component_id: functional_network_connectivity
+        source_path: review.source_sections
+    derived_edges:
+      - from_component: roi_to_roi
+        to_component: functional_network_connectivity
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 2 × 2 × 2 mm
+      - component_id: reported_denoising
+        name: wm_components
+        value: 5
+      - component_id: reported_denoising
+        name: csf_components
+        value: 5
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+    confirmed_structure:
+      - FSL topup fieldmaps feed CONN 21.a fieldmap-aware preprocessing and default aCompCor denoising.
+      - A 105-region Harvard-Oxford ROI matrix is hierarchically clustered using connectivity and anatomical proximity.
+      - Clustered ROIs define network-to-network groups tested with an MVPA omnibus statistic and FDR correction.
+    unresolved:
+      - The data-derived clustering solution must be persisted as a run artifact rather than treated as a fixed atlas.
+      - Post-hoc connection tests are uncorrected and must remain distinguishable from the corrected omnibus inference.
+    discrepancies:
+      - The analysis uses hierarchical network clustering and network-to-network inference, not graph-theory metrics.
+
+  '41559785':
+    primary_family: task_fmri_connectivity
+    software_overrides:
+      CONN: 22.v2407
+      SPM: '12.7771'
+      MATLAB: R2019b
+    source_sections:
+      - The Stroop colour-word paradigm
+      - Regions of Interest (ROI)
+      - Preprocessing
+      - Denoising
+      - Quality assessment (QA) of the denoised data
+      - Statistical analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_condition_weighted_roi_matrix_with_qc_gate
+    rejected_components:
+      - dynamic_connectivity
+      - ppi_or_gppi
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: initial_scans_discarded_per_run
+        value: 5
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 1 × 1 × 1 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 5 mm
+      - component_id: reported_denoising
+        name: wm_components
+        value: 20 including first derivatives
+      - component_id: reported_denoising
+        name: csf_components
+        value: 20 including first derivatives
+      - component_id: reported_denoising
+        name: frequency_filter
+        value: high-pass above 0.008 Hz
+      - component_id: reported_qc
+        name: subject_outlier_rule
+        value: extreme 3 IQR rule across subject-level QC measures
+    confirmed_structure:
+      - Two Stroop task sessions encode pre-fatigue and post-fatigue conditions over 67 atlas and brainstem ROIs.
+      - Condition-weighted ROI-to-ROI models follow extensive nuisance regression and high-pass filtering.
+      - QC-FC, degrees of freedom and subject-level outlier measures gate 10 of 78 participants before group and condition contrasts.
+    unresolved:
+      - The statistical description mixes ROI-to-ROI matrices with voxel and cluster terminology, requiring project-level confirmation of the exact second-level option.
+      - Brainstem ROI files are supplementary dependencies and must be versioned for reuse.
+    discrepancies:
+      - This is condition-weighted task connectivity without a reported PPI model.
+      - High-pass filtering is used instead of the resting-state band-pass filters common elsewhere in the corpus.
+
+  '38385731':
+    primary_family: rsfmri_roi_and_network_connectivity
+    software_overrides:
+      CONN: 20.b
+    source_sections:
+      - ROI-to-ROI Analysis
+      - Exploratory Network Analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_targeted_roi_regression_with_exploratory_network_branch
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+      - component_id: functional_network_connectivity
+        source_path: review.source_sections
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_qc
+        name: motion_exclusion_threshold
+        value: head motion > 2 mm
+    confirmed_structure:
+      - CONN 20.b default preprocessing feeds a targeted eight-ROI estradiol regression.
+      - A parallel exploratory 32-ROI network analysis tests years since final menstrual period using an MVPA omnibus cluster test.
+      - Age is a nuisance covariate for the targeted model but is intentionally omitted from the correlated years-since-menopause model.
+    unresolved:
+      - Denoising regressors, temporal filter, SPM version and MATLAB version are not reported.
+      - The supplementary ROI list is required to reconstruct the complete exploratory network model.
+    discrepancies:
+      - Targeted ROI-to-ROI and exploratory functional-network analyses use different ROI universes and covariate models and must remain separate branches.
+
+  '39865845':
+    primary_family: rsfmri_graph_theory
+    software_overrides:
+      CONN: 20b
+      SPM: '12'
+      MATLAB: R2019a
+    source_sections:
+      - Brain image preprocessing and analysis
+      - Statistical analysis
+      - Degree
+      - Betweenness centrality
+      - Global efficiency
+      - Local efficiency
+    provisional_pipeline_count: 1
+    split_decision: keep_roi_matrix_with_graph_metrics
+    rejected_components:
+      - dynamic_connectivity
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+      - component_id: graph_theory
+        source_path: review.source_sections
+    derived_edges:
+      - from_component: roi_to_roi
+        to_component: graph_theory
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 2 × 2 × 2 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_preprocessing
+        name: art_motion_threshold
+        value: framewise displacement > 0.5 mm
+      - component_id: reported_preprocessing
+        name: art_global_signal_threshold
+        value: z > 5
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+    confirmed_structure:
+      - CONN 20b preprocessing and denoising feed a Harvard-Oxford whole-brain ROI-to-ROI matrix.
+      - The ROI matrix feeds degree, betweenness centrality, global efficiency and local efficiency calculations in CONN.
+      - Age, sex and IQ-adjusted group comparisons use FDR correction and identify candidate network hubs.
+    unresolved:
+      - The exact graph edge threshold and treatment of negative weights are not reported clearly enough for reproduction.
+      - Sedative administration for excessive movement is mentioned without sufficient detail to model its potential effect.
+    discrepancies:
+      - The graph family is confirmed, but the reusable graph contract still lacks threshold and signed-edge semantics.
+
+  '23936840':
+    primary_family: task_fmri_graph_theory
+    software_overrides:
+      SPM: '5'
+    source_sections:
+      - 2.3. Data Analysis
+      - 2.3.1. Region-of-Interest (ROI) Determination
+      - 2.3.2. Functional Connectivity Analysis
+      - 2.3.3. Post Hoc Analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_activation_derived_seed_to_graph_chain
+    execution_context_overrides:
+      reported_preprocessing: external
+    rejected_components:
+      - conn_preprocessing
+    verified_analysis_components:
+      - component_id: task_activation_glm
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+      - component_id: graph_theory
+        source_path: review.source_sections
+    derived_edges:
+      - from_component: task_activation_glm
+        to_component: seed_to_voxel
+        relation: derives
+      - from_component: seed_to_voxel
+        to_component: roi_to_roi
+        relation: derives
+      - from_component: roi_to_roi
+        to_component: graph_theory
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 3 × 3 × 3 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 6 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+      - component_id: graph_theory
+        name: edge_threshold
+        value: correlation > 0.2
+    confirmed_structure:
+      - SPM5 task activation across four tactile conditions determines an insular seed constrained by anatomy.
+      - CONN seed-to-voxel maps produce overlapping network clusters that become post hoc ROIs.
+      - The derived ROI matrix is thresholded above 0.2 before node-level global and local efficiency comparisons.
+    unresolved:
+      - CONN and MATLAB versions are not reported.
+      - Filtering and correlation across a block design need scientific appraisal relative to condition-specific connectivity alternatives.
+    discrepancies:
+      - Graph theory is a post hoc endpoint of an activation-derived seed and ROI chain, rather than a standalone graph pipeline.
+
+  '34514400':
+    primary_family: rsfmri_graph_theory
+    software_overrides:
+      SPM: '12'
+    source_sections:
+      - Data collection and pre-processing
+      - Network construction
+      - Graph analysis
+      - Statistical analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_external_spm_and_custom_graph_pipeline
+    execution_context_overrides:
+      reported_preprocessing: external
+      graph_theory: external
+    rejected_components:
+      - conn_preprocessing
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+      - component_id: graph_theory
+        source_path: review.source_sections
+        execution_context: external
+    derived_edges:
+      - from_component: roi_to_roi
+        to_component: graph_theory
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 2 × 2 × 2 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_preprocessing
+        name: motion_exclusion_threshold
+        value: translation > 3 mm or rotation > 1 degree
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.01–0.08 Hz
+      - component_id: graph_theory
+        name: primary_edge_threshold
+        value: absolute correlation > 0.25
+      - component_id: graph_theory
+        name: sensitivity_thresholds
+        value: [0, 0.125, 0.375]
+    confirmed_structure:
+      - SPM12 preprocessing and CONN CompCor denoising feed a weighted 384-region AICHA ROI matrix.
+      - Custom MATLAB code constructs weighted undirected graphs using separate positive-only and absolute-correlation analyses.
+      - Global topology, nodal strength, betweenness centrality and hub status are tested with threshold-sensitivity analyses.
+    unresolved:
+      - CONN, CAT12 and MATLAB versions are not reported.
+      - Surrogate-network generation and custom graph scripts are unavailable, limiting exact reproduction.
+    discrepancies:
+      - Graph construction and metrics execute in custom MATLAB rather than the CONN graph module.
+
+  '24062673':
+    primary_family: rsfmri_graph_theory
+    software_overrides:
+      CONN: 13e
+      SPM: '8'
+    source_sections:
+      - FUNCTIONAL MRI PREPROCESSING
+      - ANALYSES OF HEAD MOTION
+      - FUNCTIONAL CONNECTIVITY ANALYSES
+    provisional_pipeline_count: 1
+    split_decision: keep_roi_graph_with_hub_derived_seed_followup
+    execution_context_overrides:
+      reported_preprocessing: external
+    rejected_components:
+      - conn_preprocessing
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+      - component_id: graph_theory
+        source_path: review.source_sections
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: roi_to_roi
+        to_component: graph_theory
+        relation: derives
+      - from_component: graph_theory
+        to_component: seed_to_voxel
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 6 mm
+      - component_id: reported_denoising
+        name: wm_csf_components
+        value: 3 principal components
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.01–0.08 Hz
+      - component_id: reported_qc
+        name: outlier_thresholds
+        value: global signal > 3 SD or scan-to-scan movement > 1 mm
+      - component_id: reported_qc
+        name: subject_exclusion_rule
+        value: more than 20% outlier volumes
+      - component_id: graph_theory
+        name: primary_cost_threshold
+        value: 0.15
+      - component_id: graph_theory
+        name: sensitivity_cost_thresholds
+        value: [0.05, 0.1, 0.2, 0.25]
+    confirmed_structure:
+      - SPM8 and Nipype preprocessing feeds CONN 13e correlations among 34 functionally defined ROIs.
+      - Cost-thresholded graph analyses test global efficiency, local efficiency and betweenness centrality with signed-edge sensitivity checks.
+      - A group-different hub identified by betweenness centrality becomes the seed for a follow-up whole-brain connectivity analysis.
+    unresolved:
+      - In-house preprocessing scripts and exact Nipype versions are unavailable.
+      - The unusually long six-second TR is scientifically justified narratively but remains an acquisition constraint for reuse.
+    discrepancies:
+      - Seed-to-voxel analysis is downstream of the graph result and must not be represented as an independent prespecified seed analysis.
+
+  '38116106':
+    primary_family: task_fmri_connectivity
+    source_sections:
+      - Imaging
+      - Motor task
+      - Data analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_as_baseline_motor_task_ppi_pipeline
+    verified_analysis_components:
+      - component_id: ppi_or_gppi
+        source_path: review.source_sections
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+    confirmed_structure:
+      - A right-hand motor block design supplies the psychological regressor for bilateral VTA PPI models.
+      - CONN preprocessing and aCompCor denoising feed seed-to-voxel PPI interaction maps.
+      - Baseline group differences and associations with baseline and follow-up motor change are tested with age and gender covariates.
+    unresolved:
+      - CONN, SPM and MATLAB versions, ART thresholds and exact CompCor dimensions are not reported.
+      - Band-pass filtering of task data and the use of baseline PPI to predict later change require scientific appraisal before recommendation.
+    discrepancies:
+      - Only baseline imaging enters the PPI analysis; follow-up motor score is an outcome rather than a longitudinal imaging condition.
+
+  '34194974':
+    primary_family: task_fmri_connectivity
+    software_overrides:
+      CONN: 18.a
+      SPM: '12'
+    source_sections:
+      - Functional MRI Tasks
+      - Anatomical (3DT1) data analysis
+      - fMRI data analysis
+      - Functional connectivity analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_parallel_structural_task_activation_and_connectivity_branches
+    execution_context_overrides:
+      reported_preprocessing: external
+    rejected_components:
+      - conn_preprocessing
+      - ppi_or_gppi
+    verified_analysis_components:
+      - component_id: cortical_morphometry
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: task_activation_glm
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 6 mm
+      - component_id: reported_preprocessing
+        name: motion_exclusion_threshold
+        value: translation > 2 mm or rotation > 1 degree
+      - component_id: reported_denoising
+        name: frequency_filter
+        value: frequencies below 0.01 Hz retained
+    confirmed_structure:
+      - CAT12 morphometry, SPM12 task activation and CONN 18.a task connectivity form three linked analysis branches.
+      - Eight dorsal-attention and frontoparietal seeds feed condition-weighted seed-to-voxel correlation maps across three cognitive tasks.
+      - Task activation helps select the networks used for connectivity but the connectivity model is weighted correlation rather than PPI.
+    unresolved:
+      - CAT12 and MATLAB versions, ART thresholds and exact condition regressors exported to CONN are not reported.
+      - Several activation findings are only reported at liberal uncorrected thresholds and must not drive automatic seed recommendations without warning.
+    discrepancies:
+      - The task-connectivity branch uses HRF-weighted bivariate correlation, not a PPI interaction model.
+
+  '32158212':
+    primary_family: rsfmri_roi_to_roi
+    software_overrides:
+      CONN: 16b
+      SPM: '8'
+      MATLAB: R2014a
+    source_sections:
+      - fMRI Data Pre-Processing
+      - ROI Regions Selection
+      - ROI-to-ROI FC Analysis
+      - Correlation Analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_as_resting_state_aal_roi_matrix
+    rejected_components:
+      - task_connectivity
+      - dynamic_connectivity
+      - graph_theory
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: initial_scans_discarded
+        value: 10
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.01–0.08 Hz
+    confirmed_structure:
+      - CONN 16b and SPM8 preprocess and denoise resting-state data with scrubbing and temporal filtering.
+      - Ninety AAL cerebrum ROIs define a 90 × 90 Fisher-transformed connectivity matrix.
+      - FDR-corrected group differences feed external symptom and illness-duration correlations.
+    unresolved:
+      - ART thresholds, CompCor dimensions and global-signal treatment are not reported.
+      - The formula printed for bivariate correlation appears typeset incorrectly and should not be used as an executable specification.
+    discrepancies:
+      - Despite its legacy task-fMRI label, acquisition and analysis are explicitly resting state.
+      - No graph-theory or dynamic-connectivity analysis is reported.
+
+  '39199437':
+    primary_family: rsfmri_seed_to_voxel
+    software_overrides:
+      CONN: 18.a
+      SPM: '12'
+    source_sections:
+      - 2. Materials and Methods
+    provisional_pipeline_count: 1
+    split_decision: keep_prior_structural_parcellation_linked_to_seed_maps
+    rejected_components:
+      - longitudinal_design
+    verified_analysis_components:
+      - component_id: cortical_parcellation
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: cortical_parcellation
+        to_component: seed_to_voxel
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 2 × 2 × 2 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_preprocessing
+        name: art_motion_thresholds
+        value: translation > 0.5 mm or rotation > 0.02 radians
+      - component_id: reported_preprocessing
+        name: art_global_signal_threshold
+        value: greater than 3 standard deviations
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+    confirmed_structure:
+      - Nineteen bilateral insular ROIs from prior diffusion tractography are registered with ANTs and consolidated into six functional subregions.
+      - CONN 18.a preprocessing and aCompCor denoising feed seed-to-voxel maps for the original and merged insular subdivisions.
+      - Cross-sectional within-group inference maps the functional connectivity profile of healthy adults.
+    unresolved:
+      - The prior tractography parcellation and ANTs transform files are required external dependencies.
+      - Merging regions based on observed connectivity profiles needs a frozen derivation record to avoid circular reuse.
+    discrepancies:
+      - The study is cross-sectional; the legacy longitudinal label is unsupported.
+
+  '38782876':
+    primary_family: longitudinal_pre_post
+    software_overrides:
+      CONN: 17c
+      SPM: '12'
+    source_sections:
+      - MRI data preprocessing
+      - Definition of insula subregions
+      - Gray matter volume analysis
+      - Functional connectivity analysis
+      - Statistical analysis
+    provisional_pipeline_count: 1
+    split_decision: keep_functional_parcellation_with_longitudinal_seed_and_morphometry_branches
+    verified_analysis_components:
+      - component_id: functional_parcellation
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: cortical_morphometry
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: seed_to_voxel
+        source_path: connectivity_analysis
+    derived_edges:
+      - from_component: functional_parcellation
+        to_component: seed_to_voxel
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: initial_scans_discarded
+        value: 10
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 2 × 2 × 2 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 4 mm
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+    confirmed_structure:
+      - K-means clustering of voxelwise insular connectivity defines bilateral anterior and posterior functional subregions.
+      - CONN 17c seed-to-voxel maps and a parallel SPM12 gray-matter-volume branch are measured at baseline and follow-up.
+      - A group-by-time flexible factorial model tests longitudinal interactions with morphometry, follow-up interval and GCOR covariates.
+    unresolved:
+      - The follow-up interval distribution and exact subject/session pairing contract are not reported as executable metadata.
+      - The k-means seed-definition sample and reuse policy need explicit separation from longitudinal inference to control circularity.
+    discrepancies: []
+
+  '37265553':
+    primary_family: longitudinal_pre_post
+    software_overrides:
+      CONN: 19c
+      SPM: '12'
+      MATLAB: R2016b
+    source_sections:
+      - Functional MRI pre-processing
+      - Within- and between-networks analysis of rsfMRI connectivity
+      - Statistical approach
+    provisional_pipeline_count: 1
+    split_decision: keep_longitudinal_roi_and_network_connectivity_pipeline
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: connectivity_analysis
+      - component_id: functional_network_connectivity
+        source_path: review.source_sections
+    derived_edges:
+      - from_component: roi_to_roi
+        to_component: functional_network_connectivity
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 8 mm
+      - component_id: reported_preprocessing
+        name: art_motion_threshold
+        value: 0.9 mm
+      - component_id: reported_preprocessing
+        name: art_global_signal_threshold
+        value: z ±3
+      - component_id: reported_qc
+        name: invalid_scan_exclusion
+        value: more than 20% invalid scans
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.008–0.09 Hz
+    confirmed_structure:
+      - Baseline and post-contingency-management resting-state sessions share CONN 19c preprocessing and denoising.
+      - ROI-to-ROI correlations are summarized into within-network means and between-network connectivity across five networks.
+      - Longitudinal models test drinking reduction, HIV status and their associations with connectivity changes.
+    unresolved:
+      - The exact repeated-measures subject model and missing-session handling are not fully specified in the methods text.
+      - Network masks are external parcellation dependencies and should be versioned.
+    discrepancies:
+      - The analysis contains both ROI-level and network-summary inference and should expose both outputs.
+
+  '39995218':
+    primary_family: dynamic_functional_connectivity
+    software_overrides:
+      SPM: '12'
+      Neuromark: 1.0
+    source_sections:
+      - Brain imaging
+      - Preprocessing
+      - Denoising
+      - Timecourse extraction
+      - Static functional connectivity analysis
+      - Dynamic functional connectivity analysis
+    provisional_pipeline_count: 2
+    split_decision: keep_targeted_roi_and_neuromark_dynamic_branches
+    execution_context_overrides:
+      reported_preprocessing: hybrid
+    verified_analysis_components:
+      - component_id: roi_to_roi
+        source_path: review.source_sections
+      - component_id: neuromark_ica
+        source_path: review.source_sections
+        execution_context: external
+      - component_id: dynamic_connectivity
+        source_path: review.source_sections
+        execution_context: external
+    derived_edges:
+      - from_component: roi_to_roi
+        to_component: dynamic_connectivity
+        relation: derives
+      - from_component: neuromark_ica
+        to_component: dynamic_connectivity
+        relation: derives
+    parameter_overrides:
+      - component_id: reported_preprocessing
+        name: functional_voxel_size
+        value: 2 × 2 × 2 mm
+      - component_id: reported_preprocessing
+        name: smoothing_fwhm
+        value: 6 mm
+      - component_id: reported_denoising
+        name: wm_components
+        value: 5
+      - component_id: reported_denoising
+        name: csf_components
+        value: 5
+      - component_id: reported_denoising
+        name: bandpass_filter
+        value: 0.01–0.15 Hz
+      - component_id: reported_denoising
+        name: scrubbing
+        value: false
+        notes: Despiking was used because frame removal creates discontinuities for dynamic analysis.
+      - component_id: reported_qc
+        name: run_motion_exclusion
+        value: mean framewise displacement > 0.3 mm
+      - component_id: dynamic_connectivity
+        name: primary_window
+        value: 42 TRs (30 seconds), Gaussian sigma 3 TRs, step 1 TR
+      - component_id: dynamic_connectivity
+        name: sensitivity_window
+        value: 84 TRs (60 seconds)
+      - component_id: dynamic_connectivity
+        name: state_estimation
+        value: k-means with elbow criterion, four states
+      - component_id: dynamic_connectivity
+        name: dynamic_measures
+        value: [dwell_time, episode_count, proportion_time, normalized_switch_count]
+    confirmed_structure:
+      - SPM fieldmap-aware preprocessing and CONN segmentation, smoothing and denoising prepare resting-state and breath-counting runs without frame scrubbing.
+      - One branch uses targeted DMN, CEN and salience ROIs; a second uses 53 individualized Neuromark ICA networks.
+      - Sliding-window matrices are clustered jointly into four states, followed by dwell, episode, occupancy and transition metrics and on-task/off-task models.
+      - Window-length, task-versus-rest clustering and held-out-data sensitivity analyses test state stability.
+    unresolved:
+      - CONN, GIFT, TAPAS and MATLAB versions are not reported.
+      - Combined task/rest state estimation can leak condition structure into cluster definition; the reported split and held-out sensitivity results must remain attached to interpretation.
+    discrepancies:
+      - The dynamic analysis executes in GIFT after CONN time-course preparation and is therefore a hybrid multi-tool pipeline.

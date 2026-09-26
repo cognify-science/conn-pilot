@@ -1,0 +1,411 @@
+schema_version: pipeline_instance_v1
+instance_id: pmid_38161799_pipeline_01
+instance_scope: provisional_paper_level
+paper:
+  pmid: '38161799'
+  pmcid: PMC10755010
+  doi: 10.3389/fnins.2023.1279909
+  title: Thalamic functional connectivity and sensorimotor processing in neurodevelopmental disorders
+  year: 2023
+classification:
+  primary_family: rsfmri_seed_to_voxel
+  study_design: Cross-sectional resting-state fMRI group comparison
+  modality_or_task: null
+  normalization_status: structurally_verified
+software_environment:
+- name: CONN
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.conn_version
+- name: SPM
+  version: SPM12
+  evidence: inferred
+  source_path: conn_usage.spm_version
+  notes: Legacy extraction did not encode field-level evidence; verify against the source.
+- name: MATLAB
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.matlab_version
+graph:
+  nodes:
+  - id: input
+    layer: input_adapter
+    component_id: functional_structural_dataset
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: clinical_domain
+      value: Neurodevelopmental disorders
+      evidence: inferred
+      source_path: study_context.clinical_domain
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: design
+      value: Cross-sectional resting-state fMRI group comparison
+      evidence: inferred
+      source_path: study_context.design
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: population.sample_size_total
+      value: 49
+      evidence: inferred
+      source_path: study_context.population.sample_size_total
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: population.groups
+      value:
+      - name: Autistic young adults
+        n: 15
+      - name: ADHD young adults
+        n: 19
+      - name: Neurotypical young adults
+        n: 15
+      evidence: inferred
+      source_path: study_context.population.groups
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: population.age_range
+      value: 16-30 years
+      evidence: inferred
+      source_path: study_context.population.age_range
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: population.inclusion_notes
+      value:
+      - Full-scale IQ >= 70
+      - Autistic participants required self-reported ASD diagnosis and AQ score >= 26
+      - ADHD participants required self-reported ADHD diagnosis and ASRS short-form score >= 4
+      - Comorbid ASD + ADHD participants were excluded
+      - Participants taking stimulant medication withheld it for 24 hours before scanning
+      evidence: inferred
+      source_path: study_context.population.inclusion_notes
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: primary_question
+      value: Whether thalamic resting-state functional connectivity differs between autism, ADHD, and
+        neurotypical groups.
+      evidence: inferred
+      source_path: study_context.primary_question
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: behavioral_measures
+      value:
+      - Autism Spectrum Quotient raw score
+      - Adult ADHD Self Report Scale short-form
+      evidence: inferred
+      source_path: study_context.behavioral_measures
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - study_context
+  - id: preprocessing
+    layer: preprocessing
+    component_id: reported_preprocessing
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+    parameters:
+    - name: pipeline_preset
+      value: CONN default preprocessing pipeline for volume-based analyses
+      evidence: inferred
+      source_path: conn_usage.preprocessing.pipeline_preset
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: steps
+      value:
+      - Functional realignment and unwarping
+      - Head motion outlier identification
+      - Functional and structural normalization to MNI space
+      - Structural segmentation into gray matter, white matter, and CSF
+      - Spatial smoothing
+      evidence: inferred
+      source_path: conn_usage.preprocessing.steps
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: smoothing_fwhm_mm
+      value: 5
+      evidence: inferred
+      source_path: conn_usage.preprocessing.smoothing_fwhm_mm
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: first_level_covariates
+      value:
+      - Head motion parameters from realignment
+      evidence: inferred
+      source_path: conn_usage.preprocessing.first_level_covariates
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: reported_motion_qc
+      value:
+      - Maximum head motion
+      - Mean head motion
+      - Framewise displacement
+      evidence: inferred
+      source_path: conn_usage.preprocessing.reported_motion_qc
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.preprocessing
+  - id: denoising
+    layer: denoising
+    component_id: reported_denoising
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - preprocessed_timeseries
+    provides:
+    - denoised_timeseries
+    parameters:
+    - name: method
+      value: aCompCor
+      evidence: inferred
+      source_path: conn_usage.denoising.method
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: confounds
+      value:
+      - White matter components
+      - CSF components
+      - Outlier scans / scrubbing
+      - Six head motion parameters
+      - First-order derivatives of realignment parameters
+      evidence: inferred
+      source_path: conn_usage.denoising.confounds
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: bandpass_filter_hz
+      value: 0.008-0.09
+      evidence: inferred
+      source_path: conn_usage.denoising.bandpass_filter_hz
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: missing_details
+      value:
+      - Number of aCompCor components
+      - ART/scrubbing threshold values
+      - Whether global signal regression was disabled or enabled
+      - Exact CONN version
+      evidence: inferred
+      source_path: conn_usage.denoising.missing_details
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.denoising
+  - id: seed_to_voxel
+    layer: first_level_features
+    component_id: seed_to_voxel
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: seed_rois
+      value: &id001
+      - Right thalamus
+      - Left thalamus
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.seed_rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_time_series
+      value: Average resting-state BOLD time course extracted from each thalamus seed
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.seed_time_series
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: connectivity_measure
+      value: Pearson correlation between seed time series and all brain voxels
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.connectivity_measure
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: contrasts
+      value: &id002
+      - Autism > ADHD
+      - Autism > neurotypical
+      - ADHD > neurotypical
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.contrasts
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: group_tests
+      value: &id003
+      - Two-sample t-tests
+      - 2 x 2 between-subject ANOVA controlling mean head motion
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.group_tests
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: statistical_thresholds.voxel_level
+      value: p = 0.001 uncorrected
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.statistical_thresholds.voxel_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: statistical_thresholds.cluster_level
+      value: p = 0.005 familywise error corrected
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.statistical_thresholds.cluster_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: output_maps
+      value: &id004
+      - Seed-to-voxel functional connectivity maps for right and left thalamus
+      - Cluster-level connectivity values for significant contrasts
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.output_maps
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.seed_to_voxel
+  - id: second_level
+    layer: second_level_inference
+    component_id: embedded_group_inference
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+    parameters:
+    - name: seed_to_voxel.seed_rois
+      value: *id001
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.seed_rois
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.seed_time_series
+      value: Average resting-state BOLD time course extracted from each thalamus seed
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.seed_time_series
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.connectivity_measure
+      value: Pearson correlation between seed time series and all brain voxels
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.connectivity_measure
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.contrasts
+      value: *id002
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.contrasts
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.group_tests
+      value: *id003
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.group_tests
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.statistical_thresholds.voxel_level
+      value: p = 0.001 uncorrected
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.statistical_thresholds.voxel_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.statistical_thresholds.cluster_level
+      value: p = 0.005 familywise error corrected
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.statistical_thresholds.cluster_level
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: seed_to_voxel.output_maps
+      value: *id004
+      evidence: inferred
+      source_path: conn_usage.seed_to_voxel.output_maps
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage
+  - id: human_review
+    layer: qc_decision
+    component_id: human_confirmation_gate
+    execution_context: human
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters: []
+    source_paths:
+    - automation_assessment.cannot_automate_reliably_without_human_confirmation
+  - id: outputs
+    layer: output_export
+    component_id: reported_outputs
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+    parameters:
+    - name: main_findings
+      value:
+      - Autistic participants showed stronger thalamic connectivity than ADHD participants.
+      - Right thalamus showed higher connectivity with right precentral gyrus, right pars opercularis
+        BA44, right postcentral gyrus, and right superior parietal lobule in autism compared with ADHD.
+      - Left thalamus showed higher connectivity with right precentral gyrus in autism compared with ADHD.
+      - ADHD > neurotypical did not produce significant clusters for either thalamus seed.
+      evidence: inferred
+      source_path: results_relevant_to_automation.main_findings
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: brain_behavior_analysis.predictor
+      value: Autism Spectrum Quotient raw score
+      evidence: inferred
+      source_path: results_relevant_to_automation.brain_behavior_analysis.predictor
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: brain_behavior_analysis.method
+      value: Linear regression using significant cluster connectivity values
+      evidence: inferred
+      source_path: results_relevant_to_automation.brain_behavior_analysis.method
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: brain_behavior_analysis.notes
+      value:
+      - Regression effects were described as trends toward significance for selected thalamic-sensorimotor
+        clusters.
+      evidence: inferred
+      source_path: results_relevant_to_automation.brain_behavior_analysis.notes
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - results_relevant_to_automation
+  edges:
+  - from: input
+    to: preprocessing
+    relation: data
+  - from: preprocessing
+    to: denoising
+    relation: data
+  - from: denoising
+    to: seed_to_voxel
+    relation: data
+  - from: seed_to_voxel
+    to: second_level
+    relation: data
+  - from: denoising
+    to: human_review
+    relation: observes
+  - from: seed_to_voxel
+    to: human_review
+    relation: observes
+  - from: second_level
+    to: outputs
+    relation: data
+human_confirmations:
+- Exact CONN version
+- Exact thalamus ROI source or atlas labels
+- Scrubbing/outlier threshold values
+- Number of aCompCor components
+- Whether both phase-encoding runs were concatenated, combined, or modeled separately
+- Exact covariate model beyond mean head motion in the ANOVA
+missing_information:
+- Number of aCompCor components
+- ART/scrubbing threshold values
+- Whether global signal regression was disabled or enabled
+- Exact CONN version
+review:
+  source_review_status: structural_methods_verified
+  legacy_schema_shape: custom_deep_extraction
+  split_into_multiple_instances: false
+  notes:
+  - Normalized from a legacy extraction, not re-verified against the publication.
+  - A reviewer must decide whether branches represent separate pipeline instances.
+  source_sections:
+  - Study participants
+  - Seed-to-voxel connectivity analysis
+  provisional_pipeline_count: 1
+  split_decision: keep_as_single_seed_to_voxel_pipeline
+  confirmed_structure:
+  - CONN default volume preprocessing and aCompCor denoising precede seed-to-voxel analysis.
+  - Bilateral thalamus seeds feed group comparisons and symptom regressions.
+  unresolved:
+  - CONN version and exact outlier thresholds are not reported.
+  - Several second-level models are described narratively rather than as a reusable design matrix.
+  discrepancies: []
+  rejected_components: []
+provenance:
+  source_extraction_ref: test-project/conn-knowledge-builder/extractions/conn_automation/PMID38161799.yaml
+  source_extraction_sha256: 42f55db99c12a515770f62c2dcb590e0af4975bd372cb913cb289353c0008344
+  normalizer_version: 0.1.0
+  generated_on: '2026-09-24'

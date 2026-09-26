@@ -332,13 +332,33 @@ class OperationService:
         artifacts = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {"groups": {}, "counts": {}}
         counts = artifacts.get("counts", {})
         groups = artifacts.get("groups", {})
-        subject_files: dict[str, dict[str, int]] = {}
+        metrics_path = run_dir / "qc_metrics.json"
+        metrics = json.loads(metrics_path.read_text(encoding="utf-8")) if metrics_path.is_file() else {}
+        metric_subjects = metrics.get("subjects", [])
+        if isinstance(metric_subjects, dict):
+            metric_subjects = [metric_subjects]
+        subject_files: dict[str, dict[str, Any]] = {
+            str(item["subject_id"]): {
+                "qc_images": 0,
+                "preprocessing_qc": 0,
+                "metrics": {key: value for key, value in item.items() if key != "subject_id"},
+                "art_images": [],
+            }
+            for item in metric_subjects
+            if isinstance(item, dict) and item.get("subject_id")
+        }
         for group_name in ("qc_images", "preprocessing_qc"):
             for item in groups.get(group_name, []):
                 parts = Path(item.get("relative_path", "")).parts
                 subject_id = _subject_from_parts(parts)
                 if subject_id:
-                    subject_files.setdefault(subject_id, {"qc_images": 0, "preprocessing_qc": 0})[group_name] += 1
+                    record = subject_files.setdefault(
+                        subject_id,
+                        {"qc_images": 0, "preprocessing_qc": 0, "metrics": {}, "art_images": []},
+                    )
+                    record[group_name] += 1
+                    if group_name == "qc_images":
+                        record["art_images"].append(item)
         warnings: list[str] = []
         if not path.is_file():
             warnings.append("QC artifacts are not available yet")
@@ -357,6 +377,7 @@ class OperationService:
                 "passed": technical_complete,
                 "artifact_counts": counts,
             },
+            "art_thresholds": metrics.get("thresholds", {}),
             "subjects": [
                 {"subject_id": subject_id, **values} for subject_id, values in sorted(subject_files.items())
             ],

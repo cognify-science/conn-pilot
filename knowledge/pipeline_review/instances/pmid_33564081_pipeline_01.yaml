@@ -1,0 +1,399 @@
+schema_version: pipeline_instance_v1
+instance_id: pmid_33564081_pipeline_01
+instance_scope: provisional_paper_level
+paper:
+  pmid: '33564081'
+  pmcid: PMC7873272
+  doi: 10.1038/s41598-021-83116-0
+  title: Alterations in reward network functional connectivity are associated with increased food addiction
+    in obese individuals.
+  year: 2021
+classification:
+  primary_family: rsfmri_roi_to_roi
+  study_design: &id001
+  - glm
+  - paired
+  modality_or_task: resting_state_fmri_plus_anatomical_mri
+  normalization_status: structurally_verified
+software_environment:
+- name: CONN
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.conn_version
+- name: SPM
+  version: '12'
+  evidence: explicit
+  source_path: review.source_sections
+  notes: Corrected during structural verification against the methods text.
+- name: MATLAB
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.matlab_version
+graph:
+  nodes:
+  - id: input
+    layer: input_adapter
+    component_id: functional_structural_dataset
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: modality
+      value: resting_state_fmri_plus_anatomical_mri
+      evidence: inferred
+      source_path: dataset_inputs.modality
+    - name: resting_state
+      value: true
+      evidence: inferred
+      source_path: dataset_inputs.resting_state
+    - name: task_fmri
+      value: false
+      evidence: inferred
+      source_path: dataset_inputs.task_fmri
+    - name: sample_size
+      value: 40
+      evidence: explicit
+      source_path: dataset_inputs.sample_size
+    - name: sessions
+      value: longitudinal, post, pre
+      evidence: inferred
+      source_path: dataset_inputs.sessions
+    - name: runs
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.runs
+    - name: scanner_field_strength
+      value: 3.0T
+      evidence: explicit
+      source_path: dataset_inputs.scanner_field_strength
+    - name: tr
+      value: 28 ms
+      evidence: explicit
+      source_path: dataset_inputs.tr
+    - name: scan_duration
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.scan_duration
+    - name: bids_or_input_standard
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.bids_or_input_standard
+    source_paths:
+    - dataset_inputs
+  - id: preprocessing
+    layer: preprocessing
+    component_id: reported_preprocessing
+    execution_context: external
+    status: observed
+    optional: false
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+    parameters:
+    - name: pipeline_default_or_custom
+      value: spm_based_preprocessing
+      evidence: inferred
+      source_path: preprocessing.pipeline_default_or_custom
+    - name: steps
+      value:
+      - realignment
+      - normalization
+      - segmentation
+      - smoothing
+      - outlier_detection
+      evidence: inferred
+      source_path: preprocessing.steps
+    - name: normalization_space
+      value: MNI
+      evidence: inferred
+      source_path: preprocessing.normalization_space
+    - name: functional_voxel_size
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.functional_voxel_size
+    - name: anatomical_voxel_size
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.anatomical_voxel_size
+    - name: smoothing_fwhm
+      value: 4 mm
+      evidence: explicit
+      source_path: review.source_sections
+    - name: slice_timing_correction
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.slice_timing_correction
+    - name: realignment_unwarp
+      value: true
+      evidence: explicit
+      source_path: preprocessing.realignment_unwarp
+    - name: outlier_detection
+      value: true
+      evidence: explicit
+      source_path: preprocessing.outlier_detection
+    source_paths:
+    - preprocessing
+  - id: denoising
+    layer: denoising
+    component_id: reported_denoising
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - preprocessed_timeseries
+    provides:
+    - denoised_timeseries
+    parameters:
+    - name: pipeline_default_or_custom
+      value: CONN denoising
+      evidence: inferred
+      source_path: denoising.pipeline_default_or_custom
+    - name: acompcor
+      value: true
+      evidence: inferred
+      source_path: denoising.acompcor
+    - name: wm_components
+      value: null
+      evidence: not_reported
+      source_path: denoising.wm_components
+    - name: csf_components
+      value: null
+      evidence: not_reported
+      source_path: denoising.csf_components
+    - name: motion_regressors
+      value: motion parameters reported, exact count unclear
+      evidence: inferred
+      source_path: denoising.motion_regressors
+    - name: scrubbing_regressors
+      value: null
+      evidence: not_reported
+      source_path: denoising.scrubbing_regressors
+    - name: global_signal_regression
+      value: null
+      evidence: not_reported
+      source_path: denoising.global_signal_regression
+    - name: bandpass_filter
+      value: 0.008–0.08 Hz
+      evidence: explicit
+      source_path: review.source_sections
+    - name: detrending_or_session_effects
+      value: null
+      evidence: not_reported
+      source_path: denoising.detrending_or_session_effects
+    - name: effective_dof_reported
+      value: true
+      evidence: explicit
+      source_path: denoising.effective_dof_reported
+    source_paths:
+    - denoising
+  - id: roi_to_roi
+    layer: first_level_features
+    component_id: roi_to_roi
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: fc_metric
+      value: Fisher-transformed correlation
+      evidence: inferred
+      source_path: connectivity_analysis.fc_metric
+    - name: roi_or_seed_definition
+      value:
+      - atlas
+      - roi
+      evidence: explicit
+      source_path: connectivity_analysis.roi_or_seed_definition
+    - name: atlas
+      value:
+      - Harvard
+      - Oxford
+      - Schaefer
+      evidence: explicit
+      source_path: connectivity_analysis.atlas
+    - name: network_or_voxel_sampling
+      value: null
+      evidence: inferred
+      source_path: connectivity_analysis.network_or_voxel_sampling
+    source_paths:
+    - connectivity_analysis
+  - id: second_level
+    layer: second_level_inference
+    component_id: reported_statistical_model
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+    parameters:
+    - name: first_level_model
+      value: null
+      evidence: inferred
+      source_path: statistics.first_level_model
+    - name: second_level_model
+      value: *id001
+      evidence: explicit
+      source_path: statistics.second_level_model
+    - name: covariates
+      value: []
+      evidence: inferred
+      source_path: statistics.covariates
+    - name: multiple_comparison_correction
+      value: []
+      evidence: not_reported
+      source_path: statistics.multiple_comparison_correction
+    - name: machine_learning
+      value: null
+      evidence: not_reported
+      source_path: statistics.machine_learning
+    source_paths:
+    - statistics
+  - id: qc
+    layer: qc_decision
+    component_id: reported_qc
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters:
+    - name: qc_reported
+      value: true
+      evidence: inferred
+      source_path: qc.qc_reported
+    - name: raw_qc
+      value: null
+      evidence: not_reported
+      source_path: qc.raw_qc
+    - name: preprocessing_qc
+      value: true
+      evidence: inferred
+      source_path: qc.preprocessing_qc
+    - name: denoising_qc
+      value: false
+      evidence: inferred
+      source_path: qc.denoising_qc
+    - name: fd_threshold
+      value: null
+      evidence: not_reported
+      source_path: qc.fd_threshold
+    - name: global_signal_threshold
+      value: null
+      evidence: not_reported
+      source_path: qc.global_signal_threshold
+    - name: subject_exclusion_rule
+      value: null
+      evidence: not_reported
+      source_path: qc.subject_exclusion_rule
+    - name: qc_fc
+      value: null
+      evidence: not_reported
+      source_path: qc.qc_fc
+    - name: qc_success_threshold
+      value: null
+      evidence: not_reported
+      source_path: qc.qc_success_threshold
+    - name: rms_motion_exclusion
+      value: RMS > 0.25
+      evidence: explicit
+      source_path: review.source_sections
+    source_paths:
+    - qc
+  - id: outputs
+    layer: output_export
+    component_id: reported_outputs
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+    parameters:
+    - name: primary_success_signal
+      value: successful_or_partially_successful_results_reported
+      evidence: inferred
+      source_path: outcomes.primary_success_signal
+    - name: reported_problems
+      value: []
+      evidence: not_reported
+      source_path: outcomes.reported_problems
+    - name: limitations_relevant_to_automation
+      value: &id002
+      - conn_version
+      evidence: explicit
+      source_path: outcomes.limitations_relevant_to_automation
+    source_paths:
+    - outcomes
+  edges:
+  - from: input
+    to: preprocessing
+    relation: data
+  - from: preprocessing
+    to: denoising
+    relation: data
+  - from: denoising
+    to: roi_to_roi
+    relation: data
+  - from: roi_to_roi
+    to: second_level
+    relation: data
+  - from: input
+    to: qc
+    relation: observes
+  - from: denoising
+    to: qc
+    relation: observes
+  - from: roi_to_roi
+    to: qc
+    relation: observes
+  - from: second_level
+    to: outputs
+    relation: data
+human_confirmations:
+- conn_version
+- final_scientific_question_and_contrasts
+missing_information: *id002
+review:
+  source_review_status: structural_methods_verified
+  legacy_schema_shape: canonical_extraction
+  split_into_multiple_instances: false
+  notes:
+  - Normalized from a legacy extraction, not re-verified against the publication.
+  - A reviewer must decide whether branches represent separate pipeline instances.
+  source_sections:
+  - Functional magnetic resonance imaging acquisition
+  - Functional network construction
+  - Statistical analyses
+  provisional_pipeline_count: 1
+  split_decision: keep_external_spm_processing_with_conn_roi_matrix
+  confirmed_structure:
+  - SPM12 preprocessing outside CONN feeds aCompCor nuisance regression and temporal filtering.
+  - Harvard-Oxford, Schaefer-400 and Ascending Arousal Network atlases define a 430-region ROI-to-ROI
+    matrix.
+  - CONN GLMs evaluate food-addiction and sex contrasts; selected connections feed external clinical correlations.
+  unresolved:
+  - CONN and MATLAB versions are not reported.
+  - The exact prior preprocessing protocol is partly delegated to earlier publications.
+  discrepancies:
+  - The legacy extraction reports 0.008–0.09 Hz, while the paper states 0.008–0.08 Hz.
+  - The reported functional networks are ROI-to-ROI matrices without graph-theory metrics.
+  - The legacy clinical-group family hides the actual ROI-to-ROI analysis family.
+  rejected_components:
+  - conn_preprocessing
+  - graph_theory
+provenance:
+  source_extraction_ref: test-project/conn-knowledge-builder/extractions/conn_automation/PMID33564081.yaml
+  source_extraction_sha256: b5b17001a8eba90ce689007c20e6fe443895e64505fdfa02eeca5fe19fc555b6
+  normalizer_version: 0.1.0
+  generated_on: '2026-09-24'

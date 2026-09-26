@@ -49,18 +49,43 @@ project_contract:
       maximum: 20
       confirmation_required: true
       maps_to: batch.Setup.preprocessing.fwhm
+      literature_guidance:
+        topic: spatial_smoothing
+        normalizer: millimeters
+        required_remote: true
+        sources:
+          - component_id: reported_preprocessing
+            parameter_names: [smoothing_fwhm_mm, smoothing_fwhm]
     preprocessing.outlier_fd_threshold_mm:
       type: number
       minimum: 0.1
       maximum: 5
       confirmation_required: true
       maps_to: batch.Setup.preprocessing.art_thresholds[2]
+      literature_guidance:
+        topic: art_outlier_thresholds
+        normalizer: millimeters
+        required_remote: true
+        sources:
+          - component_id: reported_preprocessing
+            parameter_names: [art_motion_threshold]
+          - component_id: reported_qc
+            parameter_names: [fd_threshold]
     preprocessing.global_signal_z_threshold:
       type: number
       minimum: 0.5
       maximum: 20
       confirmation_required: true
       maps_to: batch.Setup.preprocessing.art_thresholds[1]
+      literature_guidance:
+        topic: art_outlier_thresholds
+        normalizer: standard_deviations
+        required_remote: true
+        sources:
+          - component_id: reported_preprocessing
+            parameter_names: [art_global_signal_threshold]
+          - component_id: reported_qc
+            parameter_names: [global_signal_threshold]
     denoising.method:
       type: enum
       values: [aCompCor]
@@ -71,15 +96,36 @@ project_contract:
       minimum: 1
       confirmation_required: true
       maps_to: batch.Denoising.confounds.dimensions[1]
+      literature_guidance:
+        topic: acompcor_components
+        normalizer: integer_scalar
+        required_remote: true
+        sources:
+          - component_id: reported_denoising
+            parameter_names: [wm_components]
     denoising.csf_components:
       type: integer
       minimum: 1
       confirmation_required: true
       maps_to: batch.Denoising.confounds.dimensions[2]
+      literature_guidance:
+        topic: acompcor_components
+        normalizer: integer_scalar
+        required_remote: true
+        sources:
+          - component_id: reported_denoising
+            parameter_names: [csf_components]
     denoising.bandpass_filter_hz:
       type: number_pair
       confirmation_required: true
       maps_to: batch.Denoising.filter
+      literature_guidance:
+        topic: temporal_filter
+        normalizer: frequency_pair_hz
+        required_remote: true
+        sources:
+          - component_id: reported_denoising
+            parameter_names: [bandpass_filter, bandpass_filter_hz]
     denoising.detrending_order:
       type: integer
       minimum: 0
@@ -95,3 +141,10 @@ project_contract:
       confirmation_required: true
       implemented_values: [false]
       maps_to: explicit_no_gsr_policy
+      literature_guidance:
+        topic: global_signal_regression
+        normalizer: boolean
+        required_remote: true
+        sources:
+          - component_id: reported_denoising
+            parameter_names: [global_signal_regression]

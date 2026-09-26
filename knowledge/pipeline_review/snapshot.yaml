@@ -1,0 +1,18 @@
+schema_version: pipeline_review_snapshot_v1
+snapshot_date: '2026-09-24'
+normalizer_version: 0.1.0
+source_index_ref: test-project/conn-knowledge-builder/indexes/conn_papers_index.csv
+source_index_sha256: 3dc0f12ec4b874b448172276d62ce3ed05d76a33094a17d354465f95e50d3d8c
+counts:
+  unique_papers: 138
+  historical_rounds_1_to_4: 83
+  pilot_deep_extractions: 8
+  xml_files_available: 83
+  text_files_available: 117
+  legacy_extractions_available: 138
+  legacy_method_cards_available: 138
+  structural_methods_reviews: 45
+limitations:
+- The snapshot records the available local corpus; missing full text remains missing.
+- Pilot instances have structural methods verification; parameter-level scientific
+  appraisal remains pending.

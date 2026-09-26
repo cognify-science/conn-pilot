@@ -309,7 +309,8 @@ class DistributedWorker:
         if value.get("schema_version") != "conn_pilot_worker_state_v1":
             return None
         local_job_id = str(value.get("local_job_id", ""))
-        return local_job_id if local_job_id and service.store.get(local_job_id) else None
+        job = service.store.get(local_job_id) if local_job_id else None
+        return local_job_id if job and job.get("state") != "failed" else None
 
     def run_once(self) -> bool:
         self.heartbeat()
@@ -339,20 +340,35 @@ class DistributedWorker:
     def _upload_selected(
         self, remote_job_id: str, run_dir: Path, manifest: dict[str, Any]
     ) -> dict[str, Any]:
-        candidates: list[tuple[str, Path]] = []
-        for name in ("artifacts.json", "project.request.yaml", "matlab_stdout.log", "matlab_stderr.log"):
+        candidates: list[tuple[str, Path, str | None, dict[str, Any]]] = []
+        for name in (
+            "artifacts.json",
+            "qc_metrics.json",
+            "project.request.yaml",
+            "matlab_stdout.log",
+            "matlab_stderr.log",
+        ):
             path = run_dir / name
             if path.is_file():
-                candidates.append(("provenance", path))
+                kind = "qc_metrics" if name == "qc_metrics.json" else "provenance"
+                candidates.append((kind, path, None, {}))
         for group in ("qc_images", "second_level_maps"):
             for item in manifest.get("groups", {}).get(group, []):
                 path = Path(str(item.get("path", "")))
                 if path.is_file():
-                    candidates.append((group, path))
+                    subject_id = _artifact_subject(item.get("relative_path")) if group == "qc_images" else None
+                    candidates.append(
+                        (
+                            group,
+                            path,
+                            subject_id,
+                            {"relative_path": item.get("relative_path")},
+                        )
+                    )
         uploaded = 0
         skipped = 0
         total_bytes = 0
-        for kind, path in candidates:
+        for kind, path, subject_id, metadata in candidates:
             size = path.stat().st_size
             if size > self.max_artifact_bytes:
                 skipped += 1
@@ -373,11 +389,22 @@ class DistributedWorker:
                     "bytes": size,
                     "sha256": sha256_file(path),
                     "content_type": content_type,
+                    "subject_id": subject_id,
+                    "metadata": metadata,
                 },
             )
             uploaded += 1
             total_bytes += size
         return {"uploaded": uploaded, "skipped_too_large": skipped, "bytes": total_bytes}
+
+
+def _artifact_subject(relative_path: Any) -> str | None:
+    parts = Path(str(relative_path or "")).parts
+    try:
+        index = parts.index("inputs")
+    except ValueError:
+        return None
+    return parts[index + 1] if len(parts) > index + 1 else None
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -60,6 +60,10 @@ class FakeStore:
         self.jobs: dict[str, dict[str, Any]] = {}
         self.validations: dict[str, dict[str, Any]] = {}
         self.external_credentials: dict[str, dict[str, Any]] = {}
+        self.method_decisions: list[dict[str, Any]] = []
+        self.artifacts: list[dict[str, Any]] = []
+        self.subject_qc_decisions: list[dict[str, Any]] = []
+        self.analysis_decisions: list[dict[str, Any]] = []
 
     def verify_credential(self, token: str) -> dict[str, Any] | None:
         return {"subject": "owner", "role": "admin"} if token == "x" * 48 else None
@@ -137,7 +141,7 @@ class FakeStore:
         return [{"kind": "queued", "message": "Job queued", "details": {}}]
 
     def list_artifacts(self, job_id: str, subject: str) -> list[dict[str, Any]]:
-        return []
+        return [item for item in self.artifacts if item.get("job_id") == job_id]
 
     def register_worker(self, worker_id: str, label: str, capabilities: dict[str, Any]) -> None:
         return None
@@ -157,7 +161,146 @@ class FakeStore:
         return True
 
     def add_artifact(self, job_id: str, worker_id: str, **kwargs: Any) -> dict[str, Any]:
-        return kwargs
+        value = {"id": f"artifact-{len(self.artifacts) + 1}", "job_id": job_id, **kwargs}
+        self.artifacts.append(value)
+        return value
+
+    def record_subject_qc_decision(
+        self,
+        job_id: str,
+        owner_subject: str,
+        result_version: str,
+        subject_id: str,
+        decision: str,
+        justification: str | None,
+    ) -> dict[str, Any]:
+        value = {
+            "id": f"qc-{len(self.subject_qc_decisions) + 1}",
+            "job_id": job_id,
+            "result_version": result_version,
+            "subject_id": subject_id,
+            "decision": decision,
+            "justification": justification,
+            "decided_by": owner_subject,
+            "decided_at": "2026-09-26T12:00:00Z",
+        }
+        self.subject_qc_decisions.append(value)
+        return value
+
+    def list_subject_qc_decisions(
+        self, job_id: str, owner_subject: str, result_version: str
+    ) -> list[dict[str, Any]]:
+        return [
+            item
+            for item in self.subject_qc_decisions
+            if item["job_id"] == job_id and item["result_version"] == result_version
+        ]
+
+    def record_analysis_decision(
+        self,
+        job_id: str,
+        owner_subject: str,
+        result_version: str,
+        sample_version: str,
+        decision: str,
+        rationale: str,
+    ) -> dict[str, Any]:
+        value = {
+            "id": f"analysis-{len(self.analysis_decisions) + 1}",
+            "job_id": job_id,
+            "result_version": result_version,
+            "sample_version": sample_version,
+            "decision": decision,
+            "rationale": rationale,
+            "decided_by": owner_subject,
+            "decided_at": "2026-09-26T12:00:00Z",
+        }
+        self.analysis_decisions.append(value)
+        return value
+
+    def list_analysis_decisions(
+        self, job_id: str, owner_subject: str, result_version: str
+    ) -> list[dict[str, Any]]:
+        return [
+            item
+            for item in self.analysis_decisions
+            if item["job_id"] == job_id and item["result_version"] == result_version
+        ]
+
+    def record_method_decision(
+        self,
+        owner_subject: str,
+        project_id: str,
+        component_id: str,
+        parameter_name: str,
+        selected_value: Any,
+        evidence_ids: list[str],
+        rationale: str,
+        corpus_version: str,
+        evidence_snapshot: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        value = {
+            "id": f"decision-{len(self.method_decisions) + 1}",
+            "owner_subject": owner_subject,
+            "project_id": project_id,
+            "component_id": component_id,
+            "parameter_name": parameter_name,
+            "selected_value": selected_value,
+            "evidence_ids": evidence_ids,
+            "rationale": rationale,
+            "corpus_version": corpus_version,
+            "evidence_snapshot": evidence_snapshot,
+        }
+        self.method_decisions.append(value)
+        return value
+
+    def list_method_decisions(self, project_id: str, subject: str) -> list[dict[str, Any]]:
+        return [
+            value
+            for value in self.method_decisions
+            if value["project_id"] == project_id and value["owner_subject"] == subject
+        ]
+
+    def resolve_project_parameter(
+        self,
+        owner_subject: str,
+        project_id: str,
+        parameter_path: str,
+        parameter_record: dict[str, Any],
+        component_id: str,
+        parameter_name: str,
+        selected_value: Any,
+        evidence_ids: list[str],
+        rationale: str,
+        corpus_version: str,
+        evidence_snapshot: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        project = self.get_project(project_id, owner_subject)
+        if not project:
+            raise ValueError("Unknown project")
+        decision_id = f"decision-{len(self.method_decisions) + 1}"
+        stored_record = {**parameter_record, "method_decision_id": decision_id}
+        target = project["spec"].setdefault("parameters", {})
+        parts = parameter_path.split(".")
+        for part in parts[:-1]:
+            target = target.setdefault(part, {})
+        target[parts[-1]] = stored_record
+        project["state"] = "draft"
+        decision = {
+            "id": decision_id,
+            "owner_subject": owner_subject,
+            "project_id": project_id,
+            "parameter_path": parameter_path,
+            "component_id": component_id,
+            "parameter_name": parameter_name,
+            "selected_value": selected_value,
+            "evidence_ids": evidence_ids,
+            "rationale": rationale,
+            "corpus_version": corpus_version,
+            "evidence_snapshot": evidence_snapshot,
+        }
+        self.method_decisions.append(decision)
+        return {"decision": decision, "parameter_record": stored_record}
 
 
 def remote_spec() -> dict[str, Any]:
@@ -313,6 +456,15 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
             tools = {tool.name for tool in (await client.list_tools()).tools}
             pipelines = await client.call_tool("list_pipelines", {})
             datasets = await client.call_tool("list_datasets", {})
+            topics = await client.call_tool("list_guidance_topics", {})
+            guidance = await client.call_tool(
+                "get_parameter_guidance",
+                {
+                    "component_id": "reported_denoising",
+                    "parameter_name": "bandpass_filter",
+                    "limit": 2,
+                },
+            )
         self.assertEqual(
             tools,
             {
@@ -328,11 +480,282 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                 "get_job_logs",
                 "list_results",
                 "get_qc_summary",
+                "get_subject_qc",
+                "set_subject_qc_decision",
+                "record_scientific_decision",
                 "get_result_download_url",
+                "list_guidance_topics",
+                "get_parameter_guidance",
+                "compare_method_options",
+                "get_evidence_record",
+                "validate_parameter_choice",
+                "record_method_decision",
+                "list_method_decisions",
+                "list_unresolved_project_parameters",
+                "get_project_parameter_guidance",
+                "resolve_project_parameter",
             },
         )
         self.assertEqual(pipelines.structured_content["data"]["count"], 1)
         self.assertEqual(datasets.structured_content["data"]["count"], 1)
+        self.assertGreater(topics.structured_content["data"]["count"], 1)
+        self.assertEqual(guidance.structured_content["data"]["returned_count"], 2)
+
+    def test_subject_qc_decisions_are_versioned_and_keep_review_layers_separate(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(store, ROOT / "catalog")
+        project = store.create_project(
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+        )
+        job = store.create_job(project)
+        job.update(
+            state="succeeded",
+            result_version="sha256:result-one",
+            result_summary={
+                "qc": {
+                    "technical_completeness": {"passed": True, "artifact_counts": {}},
+                    "art_thresholds": {"global_signal_z": 3, "motion_mm": 0.5},
+                    "subjects": [
+                        {
+                            "subject_id": "sub-001",
+                            "qc_images": 1,
+                            "preprocessing_qc": 3,
+                            "metrics": {"outlier_count": 2, "outlier_percent": 1.25},
+                        },
+                        {
+                            "subject_id": "sub-002",
+                            "qc_images": 1,
+                            "preprocessing_qc": 3,
+                            "metrics": {"outlier_count": 8, "outlier_percent": 5.0},
+                        },
+                    ],
+                }
+            },
+        )
+        store.artifacts.extend(
+            [
+                {
+                    "id": "art-1",
+                    "job_id": job["id"],
+                    "kind": "qc_images",
+                    "name": "art_screenshot.jpg",
+                    "object_key": "jobs/one/art-1.jpg",
+                    "subject_id": "sub-001",
+                },
+                {
+                    "id": "art-2",
+                    "job_id": job["id"],
+                    "kind": "qc_images",
+                    "name": "art_screenshot.jpg",
+                    "object_key": "jobs/one/art-2.jpg",
+                    "subject_id": "sub-002",
+                },
+                {
+                    "id": "second-1",
+                    "job_id": job["id"],
+                    "kind": "second_level_maps",
+                    "name": "SPM.mat",
+                    "object_key": "jobs/one/SPM.mat",
+                    "subject_id": None,
+                },
+            ]
+        )
+
+        evidence = service.get_subject_qc_evidence("owner", job["id"], "sub-001")
+        self.assertEqual(evidence["data"]["subjects"][0]["metrics"]["outlier_count"], 2)
+        self.assertEqual(evidence["data"]["subjects"][0]["art_images"][0]["id"], "art-1")
+
+        with self.assertRaisesRegex(ValueError, "justification"):
+            service.set_subject_qc_decision(
+                "owner", job["id"], "sha256:result-one", "sub-002", "exclude"
+            )
+        accepted = service.set_subject_qc_decision(
+            "owner", job["id"], "sha256:result-one", "sub-001", "accept"
+        )
+        self.assertEqual(accepted["data"]["decision"]["decided_by"], "owner")
+        excluded = service.set_subject_qc_decision(
+            "owner",
+            job["id"],
+            "sha256:result-one",
+            "sub-002",
+            "exclude",
+            "Excessive ART outliers after visual review.",
+        )
+        review = excluded["data"]["review"]
+        self.assertTrue(review["technical_completeness"]["passed"])
+        self.assertTrue(review["subject_quality"]["complete"])
+        self.assertEqual(review["second_level"]["status"], "stale")
+        self.assertTrue(review["second_level"]["blocked"])
+        self.assertFalse(review["scientific_acceptance"]["eligible"])
+        with self.assertRaisesRegex(ValueError, "acceptance is blocked"):
+            service.record_scientific_decision(
+                "owner",
+                job["id"],
+                "sha256:result-one",
+                review["sample"]["version"],
+                "accept",
+                "Reviewed.",
+            )
+
+        restored = service.set_subject_qc_decision(
+            "owner", job["id"], "sha256:result-one", "sub-002", "accept"
+        )["data"]["review"]
+        self.assertEqual(restored["second_level"]["status"], "current")
+        self.assertTrue(restored["scientific_acceptance"]["eligible"])
+        scientific = service.record_scientific_decision(
+            "owner",
+            job["id"],
+            "sha256:result-one",
+            restored["sample"]["version"],
+            "accept",
+            "Technical and subject-level review completed.",
+        )
+        self.assertEqual(
+            scientific["data"]["review"]["scientific_acceptance"]["status"], "accept"
+        )
+
+        with self.assertRaisesRegex(ValueError, "result_version"):
+            service.set_subject_qc_decision(
+                "owner", job["id"], "sha256:old", "sub-001", "needs_review"
+            )
+
+    def test_literature_decision_is_validated_and_persisted_with_snapshot(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(store, ROOT / "catalog")
+        created = service.create_project(
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+        )
+        project_id = created["data"]["project"]["id"]
+        guidance = service.get_parameter_guidance(
+            "reported_denoising", "bandpass_filter", limit=1
+        )
+        observation = guidance["data"]["observations"][0]
+        recorded = service.record_method_decision(
+            "owner",
+            project_id,
+            "reported_denoising",
+            "bandpass_filter",
+            observation["value"],
+            [observation["evidence_id"]],
+            "Investigator selected this reported range after reviewing applicability.",
+        )
+        decisions = service.list_method_decisions("owner", project_id)
+        self.assertEqual(recorded["data"]["evidence_alignment"], "exact_explicit_observation")
+        self.assertFalse(recorded["data"]["scientific_validity_determined"])
+        self.assertEqual(decisions["data"]["count"], 1)
+        self.assertEqual(len(store.method_decisions[0]["evidence_snapshot"]), 1)
+
+    def test_strict_remote_project_requires_and_persists_executable_decisions(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(
+            store,
+            ROOT / "catalog",
+            require_literature_decisions=True,
+        )
+        created = service.create_project(
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+        )
+        project_id = created["data"]["project"]["id"]
+        unresolved = service.list_unresolved_project_parameters("owner", project_id)
+        self.assertEqual(unresolved["data"]["required_count"], 7)
+        self.assertEqual(unresolved["data"]["unresolved_count"], 7)
+        blocked = service.validate_project("owner", project_id)
+        self.assertFalse(blocked["ok"])
+        self.assertIn(
+            "Unresolved literature-guided parameters",
+            blocked["errors"][0],
+        )
+
+        guidance = service.get_project_parameter_guidance(
+            "owner", project_id, "denoising.bandpass_filter_hz"
+        )
+        option = guidance["data"]["options"][0]
+        resolved = service.resolve_project_parameter(
+            "owner",
+            project_id,
+            "denoising.bandpass_filter_hz",
+            option["value"],
+            [option["evidence_ids"][0]],
+            "Chosen after the investigator reviewed acquisition and denoising compatibility.",
+        )
+        self.assertEqual(resolved["data"]["remaining_unresolved_count"], 6)
+        record = store.projects[project_id]["spec"]["parameters"]["denoising"][
+            "bandpass_filter_hz"
+        ]
+        self.assertTrue(record["confirmed_by_investigator"])
+        self.assertEqual(record["method_decision_id"], store.method_decisions[0]["id"])
+        self.assertEqual(len(store.method_decisions[0]["evidence_snapshot"]), 1)
+
+    def test_project_creation_rejects_forged_decision_provenance(self) -> None:
+        spec = remote_spec()
+        record = spec["parameters"]["denoising"]["bandpass_filter_hz"]
+        record.update(
+            method_decision_id="invented",
+            evidence_ids=["invented"],
+            corpus_version="invented",
+        )
+        service = ControlPlaneService(FakeStore(), ROOT / "catalog")
+        with self.assertRaisesRegex(ValueError, "must be created by"):
+            service.create_project(
+                "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", spec
+            )
+
+    def test_resolution_status_detects_a_mismatched_persisted_decision(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(store, ROOT / "catalog")
+        project_id = service.create_project(
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+        )["data"]["project"]["id"]
+        option = service.get_project_parameter_guidance(
+            "owner", project_id, "preprocessing.smoothing_fwhm_mm", limit=1
+        )["data"]["options"][0]
+        service.resolve_project_parameter(
+            "owner",
+            project_id,
+            "preprocessing.smoothing_fwhm_mm",
+            option["value"],
+            [option["evidence_ids"][0]],
+            "Investigator selected this value after review.",
+        )
+        store.method_decisions[0]["selected_value"] = 6.0
+        status = service.list_unresolved_project_parameters("owner", project_id)
+        smoothing = next(
+            item
+            for item in status["data"]["parameters"]
+            if item["parameter_path"] == "preprocessing.smoothing_fwhm_mm"
+        )
+        self.assertFalse(smoothing["resolved"])
+        self.assertEqual(
+            smoothing["resolution_integrity"], "missing_or_mismatched_decision"
+        )
+
+    def test_execution_plan_contains_resolved_parameter_provenance(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(store, ROOT / "catalog")
+        project_id = service.create_project(
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+        )["data"]["project"]["id"]
+        guidance = service.get_project_parameter_guidance(
+            "owner", project_id, "preprocessing.smoothing_fwhm_mm", limit=1
+        )["data"]
+        option = guidance["options"][0]
+        service.resolve_project_parameter(
+            "owner",
+            project_id,
+            "preprocessing.smoothing_fwhm_mm",
+            option["value"],
+            [option["evidence_ids"][0]],
+            "Investigator reviewed the spatial scale and selected this cited value.",
+        )
+        plan = service.generate_execution_plan("owner", project_id)
+        self.assertTrue(plan["ok"])
+        self.assertIn(
+            "preprocessing.smoothing_fwhm_mm", plan["data"]["resolved_parameters"]
+        )
+        self.assertEqual(
+            plan["data"]["method_decisions"][0]["parameter_path"],
+            "preprocessing.smoothing_fwhm_mm",
+        )
 
     def test_worker_retries_a_temporary_dns_failure(self) -> None:
         sleeps: list[float] = []
@@ -350,6 +773,28 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
             result = client.post("/worker/v1/heartbeat", {"worker_id": "one"})
         self.assertEqual(result, {"ok": True})
         self.assertEqual(sleeps, [1.0])
+
+    def test_worker_does_not_restore_a_failed_local_job(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "worker-state.json"
+            state_path.write_text(
+                '{"schema_version":"conn_pilot_worker_state_v1","local_job_id":"failed-1"}',
+                encoding="utf-8",
+            )
+
+            class Store:
+                @staticmethod
+                def get(_job_id: str) -> dict[str, Any]:
+                    return {"id": "failed-1", "state": "failed"}
+
+            class Service:
+                store = Store()
+
+            self.assertIsNone(
+                __import__(
+                    "conn_pilot.distributed_worker", fromlist=["DistributedWorker"]
+                ).DistributedWorker._restored_local_job_id(state_path, Service())
+            )
 
     def test_failed_remote_job_can_be_requeued(self) -> None:
         store = FakeStore()

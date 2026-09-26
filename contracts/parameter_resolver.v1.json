@@ -1,0 +1,39 @@
+{
+  "schema_version": "conn_pilot_parameter_resolver_contract_v1",
+  "response_schema_version": "conn_pilot_parameter_resolver_v1",
+  "pipeline": {
+    "id": "rsfmri_seed_to_voxel",
+    "version": "1.0.0"
+  },
+  "required_remote_parameter_paths": [
+    "preprocessing.smoothing_fwhm_mm",
+    "preprocessing.outlier_fd_threshold_mm",
+    "preprocessing.global_signal_z_threshold",
+    "denoising.wm_components",
+    "denoising.csf_components",
+    "denoising.bandpass_filter_hz",
+    "denoising.global_signal_regression"
+  ],
+  "operations": [
+    "list_unresolved_project_parameters",
+    "get_project_parameter_guidance",
+    "resolve_project_parameter"
+  ],
+  "choice_requirements": [
+    "The value satisfies the executable pipeline contract.",
+    "The value is compatible with known dataset metadata, including the Nyquist limit.",
+    "At least one cited explicit observation normalizes to the selected executable value.",
+    "The investigator supplies a rationale and confirms the choice."
+  ],
+  "persistence": [
+    "The project parameter record stores the decision id, evidence ids and corpus version.",
+    "The method decision stores the exact evidence snapshot used at decision time.",
+    "Changing a parameter invalidates the previous project validation.",
+    "The execution plan exposes the resolved records and their decision provenance."
+  ],
+  "policy": {
+    "automatic_default": false,
+    "frequency_is_not_a_recommendation": true,
+    "scientific_validity_requires_human_judgment": true
+  }
+}

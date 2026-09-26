@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -31,12 +33,16 @@ from starlette.responses import JSONResponse
 
 from .catalog import Catalog
 from .control_store import PostgresControlStore
+from .io import nested_get
+from .literature import LiteratureEvidenceService
+from .parameter_resolver import ParameterResolver
 from .project import validate_project as validate_project_definition
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTROL_RESPONSE_SCHEMA = "conn_pilot_control_response_v1"
 REMOTE_SPEC_FIELDS = {"project", "design", "seeds", "parameters"}
+LOGGER = logging.getLogger(__name__)
 
 
 class Store(Protocol):
@@ -63,6 +69,47 @@ class Store(Protocol):
         self, job_id: str, worker_id: str, state: str, summary: dict[str, Any], error: str | None
     ) -> bool: ...
     def add_artifact(self, job_id: str, worker_id: str, **kwargs: Any) -> dict[str, Any]: ...
+    def record_subject_qc_decision(
+        self, job_id: str, owner_subject: str, result_version: str, subject_id: str,
+        decision: str, justification: str | None
+    ) -> dict[str, Any]: ...
+    def list_subject_qc_decisions(
+        self, job_id: str, owner_subject: str, result_version: str
+    ) -> list[dict[str, Any]]: ...
+    def record_analysis_decision(
+        self, job_id: str, owner_subject: str, result_version: str, sample_version: str,
+        decision: str, rationale: str
+    ) -> dict[str, Any]: ...
+    def list_analysis_decisions(
+        self, job_id: str, owner_subject: str, result_version: str
+    ) -> list[dict[str, Any]]: ...
+    def record_method_decision(
+        self,
+        owner_subject: str,
+        project_id: str,
+        component_id: str,
+        parameter_name: str,
+        selected_value: Any,
+        evidence_ids: list[str],
+        rationale: str,
+        corpus_version: str,
+        evidence_snapshot: list[dict[str, Any]],
+    ) -> dict[str, Any]: ...
+    def list_method_decisions(self, project_id: str, subject: str) -> list[dict[str, Any]]: ...
+    def resolve_project_parameter(
+        self,
+        owner_subject: str,
+        project_id: str,
+        parameter_path: str,
+        parameter_record: dict[str, Any],
+        component_id: str,
+        parameter_name: str,
+        selected_value: Any,
+        evidence_ids: list[str],
+        rationale: str,
+        corpus_version: str,
+        evidence_snapshot: list[dict[str, Any]],
+    ) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -121,6 +168,7 @@ class HybridTokenVerifier(TokenVerifier):
                 resource=self.resource,
             )
         if not self.jwk_client or not self.auth0_issuer or not self.auth0_audience:
+            LOGGER.warning("OAuth token rejected: verifier_not_configured")
             return None
         try:
             signing_key = await asyncio.to_thread(self.jwk_client.get_signing_key_from_jwt, token)
@@ -132,7 +180,8 @@ class HybridTokenVerifier(TokenVerifier):
                 issuer=self.auth0_issuer,
                 options={"require": ["exp", "iat", "iss", "aud", "sub"]},
             )
-        except jwt.PyJWTError:
+        except jwt.PyJWTError as exc:
+            LOGGER.warning("OAuth token rejected: %s", type(exc).__name__)
             return None
         raw_scope = claims.get("scope", "")
         scopes = raw_scope.split() if isinstance(raw_scope, str) else list(raw_scope)
@@ -144,6 +193,7 @@ class HybridTokenVerifier(TokenVerifier):
         )
         scopes = list(dict.fromkeys([*scopes, *permissions]))
         if "conn-pilot:use" not in scopes:
+            LOGGER.warning("OAuth token rejected: missing_required_scope")
             return None
 
         subject = f"auth0:{claims['sub']}"
@@ -153,6 +203,7 @@ class HybridTokenVerifier(TokenVerifier):
             email=claims.get("email") if claims.get("email_verified") else None,
         )
         if not identity:
+            LOGGER.warning("OAuth token rejected: external_identity_disabled")
             return None
         if identity.get("role") == "admin":
             scopes.append("conn-pilot:admin")
@@ -206,9 +257,21 @@ class ArtifactStorage:
 
 
 class ControlPlaneService:
-    def __init__(self, store: Store, catalog_root: str | Path) -> None:
+    def __init__(
+        self,
+        store: Store,
+        catalog_root: str | Path,
+        literature_root: str | Path | None = None,
+        *,
+        require_literature_decisions: bool = False,
+    ) -> None:
         self.store = store
         self.catalog = Catalog(catalog_root)
+        self.literature = LiteratureEvidenceService(
+            literature_root or Path.cwd() / "knowledge" / "pipeline_review"
+        )
+        self.parameter_resolver = ParameterResolver(self.literature)
+        self.require_literature_decisions = require_literature_decisions
 
     def list_pipelines(self) -> dict[str, Any]:
         records: list[dict[str, Any]] = []
@@ -246,7 +309,7 @@ class ControlPlaneService:
         spec: dict[str, Any],
     ) -> dict[str, Any]:
         self._dataset(dataset_id)
-        self.catalog.resolve(pipeline_id, pipeline_version)
+        pipeline = self.catalog.resolve(pipeline_id, pipeline_version)
         if not isinstance(spec, dict):
             raise ValueError("spec must be an object")
         unknown = sorted(set(spec) - REMOTE_SPEC_FIELDS)
@@ -255,6 +318,16 @@ class ControlPlaneService:
             raise ValueError(f"Unknown project spec fields: {', '.join(unknown)}")
         if missing:
             raise ValueError(f"Missing project spec fields: {', '.join(missing)}")
+        for path in pipeline.definition["project_contract"].get("parameters", {}):
+            record = nested_get(spec, f"parameters.{path}")
+            if isinstance(record, dict) and any(
+                key in record
+                for key in ("method_decision_id", "evidence_ids", "corpus_version")
+            ):
+                raise ValueError(
+                    f"parameters.{path} decision provenance must be created by "
+                    "resolve_project_parameter"
+                )
         project = self.store.create_project(subject, dataset_id, pipeline_id, pipeline_version, spec)
         return _response("create_project", {"project": project})
 
@@ -264,9 +337,22 @@ class ControlPlaneService:
         pipeline = self.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
         definition = materialize_remote_project(project, dataset, use_placeholders=True)
         result = validate_project_definition(definition, pipeline, check_paths=False)
+        errors = list(result.errors)
+        if self.require_literature_decisions:
+            unresolved = [
+                item["parameter_path"]
+                for item in self._parameter_resolution_status(
+                    subject, project, dataset, pipeline
+                )
+                if not item["resolved"]
+            ]
+            if unresolved:
+                errors.append(
+                    "Unresolved literature-guided parameters: " + ", ".join(unresolved)
+                )
         validation = {
-            "valid": result.valid,
-            "errors": list(result.errors),
+            "valid": not errors,
+            "errors": errors,
             "warnings": list(result.warnings),
             "dataset_fingerprint": dataset["fingerprint"],
             "dataset_status": dataset["status"],
@@ -292,6 +378,23 @@ class ControlPlaneService:
             {"order": index, "id": stage["id"], "version": str(stage["version"])}
             for index, stage in enumerate(pipeline.stages, start=1)
         ]
+        decisions = self.store.list_method_decisions(project_id, subject)
+        resolution_status = self._parameter_resolution_status(
+            subject, project, dataset, pipeline, decisions=decisions
+        )
+        resolved_parameters = {
+            item["parameter_path"]: item["current_record"]
+            for item in (
+                self.parameter_resolver.guidance(
+                    self._resolver_project(project, dataset),
+                    pipeline,
+                    entry["parameter_path"],
+                    limit=1,
+                )
+                for entry in resolution_status
+                if entry["resolved"]
+            )
+        }
         data = {
             "project_id": project_id,
             "dataset_id": dataset["id"],
@@ -299,6 +402,24 @@ class ControlPlaneService:
             "worker_id": dataset["worker_id"],
             "pipeline": {"id": pipeline.id, "version": pipeline.version},
             "stages": stages,
+            "resolved_parameters": resolved_parameters,
+            "method_decisions": [
+                {
+                    key: decision.get(key)
+                    for key in (
+                        "id",
+                        "parameter_path",
+                        "component_id",
+                        "parameter_name",
+                        "selected_value",
+                        "evidence_ids",
+                        "rationale",
+                        "corpus_version",
+                        "created_at",
+                    )
+                }
+                for decision in decisions
+            ],
             "execution": {"mode": "pull_worker", "concurrency": 1, "input_location": "worker_local"},
             "ready_to_submit": validation["ok"],
         }
@@ -349,14 +470,433 @@ class ControlPlaneService:
     def get_qc_summary(self, subject: str, job_id: str) -> dict[str, Any]:
         job = self._job(job_id, subject)
         summary = job.get("result_summary") or {}
+        review = self._review_state(subject, job)
         return _response(
             "get_qc_summary",
             {
                 "job_id": job_id,
                 "state": job["state"],
+                "result_version": job.get("result_version"),
                 "qc": summary.get("qc", {}),
-                "scientific_review_required": True,
+                "review": review,
             },
+        )
+
+    def get_subject_qc_evidence(
+        self, subject: str, job_id: str, subject_id: str | None = None
+    ) -> dict[str, Any]:
+        job = self._job(job_id, subject)
+        review = self._review_state(subject, job)
+        records = review["subject_quality"]["subjects"]
+        if subject_id is not None:
+            records = [item for item in records if item["subject_id"] == subject_id]
+            if not records:
+                raise ValueError("Unknown subject for this result version")
+        return _response(
+            "get_subject_qc_evidence",
+            {
+                "job_id": job_id,
+                "result_version": job.get("result_version"),
+                "art_thresholds": (job.get("result_summary") or {}).get("qc", {}).get(
+                    "art_thresholds", {}
+                ),
+                "subjects": records,
+                "count": len(records),
+            },
+        )
+
+    def set_subject_qc_decision(
+        self,
+        subject: str,
+        job_id: str,
+        result_version: str,
+        subject_id: str,
+        decision: str,
+        justification: str | None = None,
+    ) -> dict[str, Any]:
+        if decision not in {"accept", "exclude", "needs_review"}:
+            raise ValueError("decision must be accept, exclude, or needs_review")
+        normalized = justification.strip() if isinstance(justification, str) else None
+        if decision == "exclude" and not normalized:
+            raise ValueError("A justification is required for every exclusion")
+        job = self._job(job_id, subject)
+        if job.get("result_version") != result_version:
+            raise ValueError("The supplied result_version is not current")
+        recorded = self.store.record_subject_qc_decision(
+            job_id,
+            subject,
+            result_version,
+            subject_id,
+            decision,
+            normalized,
+        )
+        current_job = self._job(job_id, subject)
+        review = self._review_state(subject, current_job)
+        return _response(
+            "set_subject_qc_decision",
+            {"decision": recorded, "review": review},
+            warnings=(
+                ["The effective sample changed; existing second-level results are blocked until recalculated."]
+                if review["second_level"]["blocked"]
+                else []
+            ),
+        )
+
+    def record_scientific_decision(
+        self,
+        subject: str,
+        job_id: str,
+        result_version: str,
+        sample_version: str,
+        decision: str,
+        rationale: str,
+    ) -> dict[str, Any]:
+        if decision not in {"accept", "reject", "needs_review"}:
+            raise ValueError("decision must be accept, reject, or needs_review")
+        if not isinstance(rationale, str) or not rationale.strip():
+            raise ValueError("rationale is required")
+        job = self._job(job_id, subject)
+        if job.get("result_version") != result_version:
+            raise ValueError("The supplied result_version is not current")
+        review = self._review_state(subject, job)
+        if review["sample"]["version"] != sample_version:
+            raise ValueError("The supplied sample_version is not current")
+        if decision == "accept" and not review["scientific_acceptance"]["eligible"]:
+            raise ValueError(
+                "Scientific acceptance is blocked until technical completeness, subject QC, "
+                "and a current second-level result are all satisfied"
+            )
+        recorded = self.store.record_analysis_decision(
+            job_id,
+            subject,
+            result_version,
+            sample_version,
+            decision,
+            rationale.strip(),
+        )
+        return _response(
+            "record_scientific_decision",
+            {"decision": recorded, "review": self._review_state(subject, job)},
+        )
+
+    def _review_state(self, subject: str, job: dict[str, Any]) -> dict[str, Any]:
+        result_version = job.get("result_version")
+        summary = job.get("result_summary") or {}
+        qc = summary.get("qc", {})
+        qc_subjects = qc.get("subjects", [])
+        if isinstance(qc_subjects, dict):
+            qc_subjects = [qc_subjects]
+        artifacts = self.store.list_artifacts(job["id"], subject)
+        qc_images: dict[str, list[dict[str, Any]]] = {}
+        for artifact in artifacts:
+            artifact_subject = artifact.get("subject_id")
+            if artifact.get("kind") == "qc_images" and artifact_subject:
+                qc_images.setdefault(str(artifact_subject), []).append(artifact)
+        decisions = (
+            self.store.list_subject_qc_decisions(job["id"], subject, result_version)
+            if result_version
+            else []
+        )
+        current: dict[str, dict[str, Any]] = {}
+        for item in decisions:
+            current[str(item["subject_id"])] = item
+        subjects: list[dict[str, Any]] = []
+        for item in qc_subjects:
+            if not isinstance(item, dict) or not item.get("subject_id"):
+                continue
+            subject_id = str(item["subject_id"])
+            subjects.append(
+                {
+                    "subject_id": subject_id,
+                    "metrics": item.get("metrics", {}),
+                    "artifact_counts": {
+                        "qc_images": item.get("qc_images", 0),
+                        "preprocessing_qc": item.get("preprocessing_qc", 0),
+                    },
+                    "art_images": qc_images.get(subject_id, []),
+                    "decision": current.get(subject_id),
+                }
+            )
+        original_ids = sorted(item["subject_id"] for item in subjects)
+        excluded_ids = sorted(
+            item["subject_id"]
+            for item in subjects
+            if item.get("decision") and item["decision"].get("decision") == "exclude"
+        )
+        included_ids = [value for value in original_ids if value not in set(excluded_ids)]
+        sample_version = "sha256:" + hashlib.sha256(
+            json.dumps(included_ids, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        unresolved_ids = [
+            item["subject_id"]
+            for item in subjects
+            if not item.get("decision") or item["decision"].get("decision") == "needs_review"
+        ]
+        second_level_available = any(item.get("kind") == "second_level_maps" for item in artifacts)
+        sample_changed = included_ids != original_ids
+        second_level_current = second_level_available and not sample_changed
+        technical = qc.get("technical_completeness", {})
+        technical_passed = bool(technical.get("passed"))
+        eligible = bool(
+            technical_passed
+            and subjects
+            and not unresolved_ids
+            and second_level_current
+            and included_ids
+        )
+        analysis_decisions = (
+            self.store.list_analysis_decisions(job["id"], subject, result_version)
+            if result_version
+            else []
+        )
+        latest_subject_decision_at = max(
+            (str(item.get("decided_at", "")) for item in current.values()),
+            default="",
+        )
+        current_analysis = next(
+            (
+                item
+                for item in reversed(analysis_decisions)
+                if item.get("sample_version") == sample_version
+                and str(item.get("decided_at", "")) >= latest_subject_decision_at
+            ),
+            None,
+        )
+        return {
+            "technical_completeness": {
+                "passed": technical_passed,
+                "details": technical,
+            },
+            "subject_quality": {
+                "complete": bool(subjects) and not unresolved_ids,
+                "subjects": subjects,
+                "unresolved_subject_ids": unresolved_ids,
+            },
+            "sample": {
+                "version": sample_version,
+                "original_subject_ids": original_ids,
+                "included_subject_ids": included_ids,
+                "excluded_subject_ids": excluded_ids,
+                "changed_from_computed_second_level": sample_changed,
+            },
+            "second_level": {
+                "status": (
+                    "stale" if sample_changed else "current" if second_level_current else "unavailable"
+                ),
+                "blocked": not second_level_current,
+                "recalculation_required": sample_changed,
+                "reason": (
+                    "The effective sample differs from the sample used to compute the second level."
+                    if sample_changed
+                    else None
+                ),
+            },
+            "scientific_acceptance": {
+                "eligible": eligible,
+                "current_decision": current_analysis,
+                "status": current_analysis.get("decision") if current_analysis else "needs_review",
+            },
+        }
+
+    def list_guidance_topics(self) -> dict[str, Any]:
+        return self.literature.list_guidance_topics()
+
+    def get_parameter_guidance(
+        self,
+        component_id: str,
+        parameter_name: str | None = None,
+        *,
+        context: dict[str, Any] | None = None,
+        include_inferred: bool = False,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        return self.literature.get_parameter_guidance(
+            component_id,
+            parameter_name,
+            context=context,
+            include_inferred=include_inferred,
+            limit=limit,
+        )
+
+    def compare_method_options(
+        self,
+        component_id: str,
+        parameter_name: str,
+        *,
+        context: dict[str, Any] | None = None,
+        include_inferred: bool = False,
+    ) -> dict[str, Any]:
+        return self.literature.compare_method_options(
+            component_id,
+            parameter_name,
+            context=context,
+            include_inferred=include_inferred,
+        )
+
+    def get_evidence_record(self, pmid: str) -> dict[str, Any]:
+        return self.literature.get_evidence_record(pmid)
+
+    def validate_parameter_choice(
+        self,
+        component_id: str,
+        parameter_name: str,
+        selected_value: Any,
+        evidence_ids: list[str],
+    ) -> dict[str, Any]:
+        return self.literature.validate_parameter_choice(
+            component_id,
+            parameter_name,
+            selected_value,
+            evidence_ids,
+        )
+
+    def record_method_decision(
+        self,
+        subject: str,
+        project_id: str,
+        component_id: str,
+        parameter_name: str,
+        selected_value: Any,
+        evidence_ids: list[str],
+        rationale: str,
+    ) -> dict[str, Any]:
+        self._project(project_id, subject)
+        if not isinstance(rationale, str) or not rationale.strip():
+            raise ValueError("rationale is required")
+        validation = self.literature.validate_parameter_choice(
+            component_id,
+            parameter_name,
+            selected_value,
+            evidence_ids,
+        )
+        decision = self.store.record_method_decision(
+            subject,
+            project_id,
+            component_id,
+            parameter_name,
+            selected_value,
+            evidence_ids,
+            rationale.strip(),
+            validation["corpus_version"],
+            validation["data"]["evidence_snapshot"],
+        )
+        return _response(
+            "record_method_decision",
+            {
+                "decision": decision,
+                "evidence_alignment": validation["data"]["evidence_alignment"],
+                "scientific_validity_determined": False,
+            },
+            warnings=validation["warnings"],
+        )
+
+    def list_method_decisions(self, subject: str, project_id: str) -> dict[str, Any]:
+        self._project(project_id, subject)
+        decisions = self.store.list_method_decisions(project_id, subject)
+        return _response(
+            "list_method_decisions",
+            {"project_id": project_id, "decisions": decisions, "count": len(decisions)},
+        )
+
+    def list_unresolved_project_parameters(
+        self, subject: str, project_id: str
+    ) -> dict[str, Any]:
+        project = self._project(project_id, subject)
+        dataset = self._dataset(project["dataset_id"])
+        pipeline = self.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
+        parameters = self._parameter_resolution_status(
+            subject, project, dataset, pipeline
+        )
+        unresolved = [item for item in parameters if not item["resolved"]]
+        return _response(
+            "list_unresolved_project_parameters",
+            {
+                "project_id": project_id,
+                "parameters": parameters,
+                "required_count": len(parameters),
+                "unresolved_count": len(unresolved),
+                "ready": not unresolved,
+            },
+        )
+
+    def get_project_parameter_guidance(
+        self,
+        subject: str,
+        project_id: str,
+        parameter_path: str,
+        *,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        project = self._project(project_id, subject)
+        dataset = self._dataset(project["dataset_id"])
+        pipeline = self.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
+        guidance = self.parameter_resolver.guidance(
+            self._resolver_project(project, dataset), pipeline, parameter_path, limit=limit
+        )
+        return _response("get_project_parameter_guidance", guidance)
+
+    def resolve_project_parameter(
+        self,
+        subject: str,
+        project_id: str,
+        parameter_path: str,
+        selected_value: Any,
+        evidence_ids: list[str],
+        rationale: str,
+    ) -> dict[str, Any]:
+        if not isinstance(rationale, str) or not rationale.strip():
+            raise ValueError("rationale is required")
+        project = self._project(project_id, subject)
+        dataset = self._dataset(project["dataset_id"])
+        pipeline = self.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
+        validation = self.parameter_resolver.validate_choice(
+            self._resolver_project(project, dataset),
+            pipeline,
+            parameter_path,
+            selected_value,
+            evidence_ids,
+        )
+        parameter_record = {
+            "value": validation["selected_value"],
+            "source": f"literature_guidance:{validation['corpus_version']}",
+            "rationale": rationale.strip(),
+            "confirmed_by_investigator": True,
+            "evidence_ids": validation["exact_evidence_ids"],
+            "corpus_version": validation["corpus_version"],
+        }
+        result = self.store.resolve_project_parameter(
+            subject,
+            project_id,
+            parameter_path,
+            parameter_record,
+            "|".join(validation["literature_component_ids"]),
+            "|".join(validation["literature_parameter_names"]),
+            validation["selected_value"],
+            validation["exact_evidence_ids"],
+            rationale.strip(),
+            validation["corpus_version"],
+            validation["evidence_snapshot"],
+        )
+        updated = self._project(project_id, subject)
+        remaining = [
+            item
+            for item in self._parameter_resolution_status(
+                subject, updated, dataset, pipeline
+            )
+            if not item["resolved"]
+        ]
+        return _response(
+            "resolve_project_parameter",
+            {
+                **result,
+                "evidence_alignment": "exact_explicit_observation",
+                "remaining_unresolved_count": len(remaining),
+                "remaining_parameter_paths": [item["parameter_path"] for item in remaining],
+                "scientific_validity_determined": False,
+            },
+            warnings=[
+                "This confirms the investigator's documented choice; it does not establish scientific validity."
+            ],
         )
 
     def _dataset(self, dataset_id: str) -> dict[str, Any]:
@@ -376,6 +916,51 @@ class ControlPlaneService:
         if not job:
             raise ValueError(f"Unknown job: {job_id}")
         return job
+
+    def _parameter_resolution_status(
+        self,
+        subject: str,
+        project: dict[str, Any],
+        dataset: dict[str, Any],
+        pipeline: Any,
+        *,
+        decisions: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        statuses = self.parameter_resolver.unresolved_paths(
+            self._resolver_project(project, dataset), pipeline
+        )
+        by_id = {
+            str(decision["id"]): decision
+            for decision in (
+                decisions
+                if decisions is not None
+                else self.store.list_method_decisions(project["id"], subject)
+            )
+        }
+        for status in statuses:
+            if not status["resolved"]:
+                status["resolution_integrity"] = "incomplete_parameter_record"
+                continue
+            record = nested_get(
+                project["spec"], f"parameters.{status['parameter_path']}"
+            )
+            decision = by_id.get(str(record["method_decision_id"]))
+            matches = bool(
+                decision
+                and decision.get("parameter_path") == status["parameter_path"]
+                and decision.get("selected_value") == record.get("value")
+                and decision.get("evidence_ids") == record.get("evidence_ids")
+                and decision.get("corpus_version") == record.get("corpus_version")
+            )
+            status["resolved"] = matches
+            status["resolution_integrity"] = (
+                "verified" if matches else "missing_or_mismatched_decision"
+            )
+        return statuses
+
+    @staticmethod
+    def _resolver_project(project: dict[str, Any], dataset: dict[str, Any]) -> dict[str, Any]:
+        return {**project, "dataset_metadata": dataset.get("metadata", {})}
 
 
 def materialize_remote_project(
@@ -453,7 +1038,18 @@ def build_control_plane_server(
 ) -> MCPServer:
     storage = artifact_storage or ArtifactStorage()
     catalog_root = Path(os.environ.get("CONN_PILOT_CATALOG", REPO_ROOT / "catalog"))
-    service = ControlPlaneService(store, catalog_root)
+    literature_root = Path(
+        os.environ.get(
+            "CONN_PILOT_LITERATURE_ROOT",
+            Path.cwd() / "knowledge" / "pipeline_review",
+        )
+    )
+    service = ControlPlaneService(
+        store,
+        catalog_root,
+        literature_root,
+        require_literature_decisions=True,
+    )
     parsed = urlsplit(settings.public_base_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
     verifier = (
@@ -481,7 +1077,10 @@ def build_control_plane_server(
         "CONN Pilot",
         instructions=(
             "Use dataset_id, project_id and job_id; never invent server paths. Submit long CONN analyses "
-            "as jobs and poll get_job_status. Scientific QC decisions always require investigator review."
+            "as jobs and poll get_job_status. Scientific QC decisions always require investigator review. "
+            "For methodological questions, retrieve literature evidence, distinguish explicit from inferred "
+            "observations, present alternatives with citations, and never turn frequency into an automatic default. "
+            "Before submission, resolve every required project parameter through the project-specific guidance tools."
         ),
         token_verifier=verifier,
         auth=auth,
@@ -555,8 +1154,196 @@ def build_control_plane_server(
 
     @server.tool(annotations=read_only)
     def get_qc_summary(job_id: str) -> dict[str, Any]:
-        """Read the technical QC summary while keeping scientific acceptance under human review."""
+        """Read separate technical, subject-quality, sample, second-level and scientific-review states."""
         return service.get_qc_summary(subject(), job_id)
+
+    @server.tool(annotations=read_only)
+    def get_subject_qc(job_id: str, subject_id: str | None = None) -> dict[str, Any]:
+        """Show ART metrics, current QC decisions and temporary image URLs per subject."""
+        response = service.get_subject_qc_evidence(subject(), job_id, subject_id)
+        for record in response["data"]["subjects"]:
+            for artifact in record["art_images"]:
+                artifact["download_url"] = storage.download_url(artifact["object_key"])
+                artifact["expires_in"] = 3600
+        return response
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=False,
+        )
+    )
+    def set_subject_qc_decision(
+        job_id: str,
+        result_version: str,
+        subject_id: str,
+        decision: str,
+        justification: str | None = None,
+    ) -> dict[str, Any]:
+        """Record accept, exclude, or needs_review for one subject; exclusions require justification."""
+        return service.set_subject_qc_decision(
+            subject(),
+            job_id,
+            result_version,
+            subject_id,
+            decision,
+            justification,
+        )
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=False,
+        )
+    )
+    def record_scientific_decision(
+        job_id: str,
+        result_version: str,
+        sample_version: str,
+        decision: str,
+        rationale: str,
+    ) -> dict[str, Any]:
+        """Record scientific acceptance separately; acceptance is blocked by incomplete QC or stale second level."""
+        return service.record_scientific_decision(
+            subject(),
+            job_id,
+            result_version,
+            sample_version,
+            decision,
+            rationale,
+        )
+
+    @server.tool(annotations=read_only)
+    def list_guidance_topics() -> dict[str, Any]:
+        """List literature-reviewed pipeline components and parameters available for client-side guidance."""
+        return service.list_guidance_topics()
+
+    @server.tool(annotations=read_only)
+    def get_parameter_guidance(
+        component_id: str,
+        parameter_name: str | None = None,
+        context: dict[str, Any] | None = None,
+        include_inferred: bool = False,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """Retrieve cited parameter observations; compare applicability and never present frequency as a recommendation."""
+        return service.get_parameter_guidance(
+            component_id,
+            parameter_name,
+            context=context,
+            include_inferred=include_inferred,
+            limit=limit,
+        )
+
+    @server.tool(annotations=read_only)
+    def compare_method_options(
+        component_id: str,
+        parameter_name: str,
+        context: dict[str, Any] | None = None,
+        include_inferred: bool = False,
+    ) -> dict[str, Any]:
+        """Group reported parameter values into cited options without selecting an automatic scientific default."""
+        return service.compare_method_options(
+            component_id,
+            parameter_name,
+            context=context,
+            include_inferred=include_inferred,
+        )
+
+    @server.tool(annotations=read_only)
+    def get_evidence_record(pmid: str) -> dict[str, Any]:
+        """Read one structurally reviewed paper record, including methods, unresolved issues and parameter evidence."""
+        return service.get_evidence_record(pmid)
+
+    @server.tool(annotations=read_only)
+    def validate_parameter_choice(
+        component_id: str,
+        parameter_name: str,
+        selected_value: Any,
+        evidence_ids: list[str],
+    ) -> dict[str, Any]:
+        """Check that cited evidence belongs to a parameter and whether the selected value was explicitly reported."""
+        return service.validate_parameter_choice(
+            component_id,
+            parameter_name,
+            selected_value,
+            evidence_ids,
+        )
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=False,
+        )
+    )
+    def record_method_decision(
+        project_id: str,
+        component_id: str,
+        parameter_name: str,
+        selected_value: Any,
+        evidence_ids: list[str],
+        rationale: str,
+    ) -> dict[str, Any]:
+        """Persist an investigator-confirmed method decision with its exact evidence snapshot and rationale."""
+        return service.record_method_decision(
+            subject(),
+            project_id,
+            component_id,
+            parameter_name,
+            selected_value,
+            evidence_ids,
+            rationale,
+        )
+
+    @server.tool(annotations=read_only)
+    def list_method_decisions(project_id: str) -> dict[str, Any]:
+        """List the versioned methodological decisions recorded for one owned project."""
+        return service.list_method_decisions(subject(), project_id)
+
+    @server.tool(annotations=read_only)
+    def list_unresolved_project_parameters(project_id: str) -> dict[str, Any]:
+        """List the literature-guided executable parameters that still require investigator confirmation."""
+        return service.list_unresolved_project_parameters(subject(), project_id)
+
+    @server.tool(annotations=read_only)
+    def get_project_parameter_guidance(
+        project_id: str, parameter_path: str, limit: int = 50
+    ) -> dict[str, Any]:
+        """Return executable, dataset-compatible options and exact evidence for one project parameter."""
+        return service.get_project_parameter_guidance(
+            subject(), project_id, parameter_path, limit=limit
+        )
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=False,
+        )
+    )
+    def resolve_project_parameter(
+        project_id: str,
+        parameter_path: str,
+        selected_value: Any,
+        evidence_ids: list[str],
+        rationale: str,
+    ) -> dict[str, Any]:
+        """Confirm a cited executable value and atomically bind its decision record to the project."""
+        return service.resolve_project_parameter(
+            subject(),
+            project_id,
+            parameter_path,
+            selected_value,
+            evidence_ids,
+            rationale,
+        )
 
     @server.tool(annotations=read_only)
     def get_result_download_url(job_id: str, artifact_id: str) -> dict[str, Any]:
@@ -676,6 +1463,8 @@ def build_control_plane_server(
                 bytes_count=int(body["bytes"]),
                 sha256=str(body["sha256"]),
                 content_type=str(body.get("content_type", "application/octet-stream")),
+                subject_id=(str(body["subject_id"]) if body.get("subject_id") else None),
+                metadata=body.get("metadata", {}),
             )
         except (KeyError, TypeError, ValueError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)

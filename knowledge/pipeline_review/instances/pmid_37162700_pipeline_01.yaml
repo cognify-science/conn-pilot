@@ -1,0 +1,464 @@
+schema_version: pipeline_instance_v1
+instance_id: pmid_37162700_pipeline_01
+instance_scope: provisional_paper_level
+paper:
+  pmid: '37162700'
+  pmcid: PMC10170058
+  doi: 10.1007/s11357-023-00805-6
+  title: Combining exercise with cognitive training and vitamin D3 to improve functional brain connectivity
+    (FBC) in older adults with mild cognitive impairment (MCI). Results from the SYNERGIC trial
+  year: 2023
+classification:
+  primary_family: longitudinal_pre_post
+  study_design: four fractional-factorial intervention models comparing collapsed study arms
+  modality_or_task: resting_state_fmri_plus_anatomical_mri
+  normalization_status: structurally_verified
+software_environment:
+- name: CONN
+  version: 20.b
+  evidence: explicit
+  source_path: conn_usage.conn_version
+- name: SPM
+  version: SPM12
+  evidence: explicit
+  source_path: conn_usage.spm_version
+- name: MATLAB
+  version: R2020b
+  evidence: explicit
+  source_path: conn_usage.matlab_version
+graph:
+  nodes:
+  - id: input
+    layer: input_adapter
+    component_id: fmriprep_derivatives_import
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: modality
+      value: resting_state_fmri_plus_anatomical_mri
+      evidence: explicit
+      source_path: dataset_inputs.modality
+    - name: resting_state
+      value: true
+      evidence: explicit
+      source_path: dataset_inputs.resting_state
+    - name: task_fmri
+      value: false
+      evidence: explicit
+      source_path: dataset_inputs.task_fmri
+    - name: sample_size
+      value: 120
+      evidence: explicit
+      source_path: dataset_inputs.sample_size
+    - name: sessions
+      value: pre-intervention T0 and post-intervention T6 imaging; follow-up T12 was clinical but not
+        imaging
+      evidence: explicit
+      source_path: dataset_inputs.sessions
+    - name: runs
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.runs
+    - name: scanner_field_strength
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.scanner_field_strength
+    - name: tr
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.tr
+    - name: scan_duration
+      value: null
+      evidence: not_reported
+      source_path: dataset_inputs.scan_duration
+    - name: bids_or_input_standard
+      value: organized according to BIDS before fMRIPrep
+      evidence: explicit
+      source_path: dataset_inputs.bids_or_input_standard
+    source_paths:
+    - dataset_inputs
+  - id: preprocessing
+    layer: preprocessing
+    component_id: reported_preprocessing
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+    parameters:
+    - name: pipeline_default_or_custom
+      value: hybrid external preprocessing with fMRIPrep 20.2.0, then final smoothing in CONN
+      evidence: explicit
+      source_path: preprocessing.pipeline_default_or_custom
+    - name: steps
+      value:
+      - visual_raw_data_inspection
+      - bids_organization
+      - fmriprep_preprocessing
+      - fsl_bet_skull_stripping_after_fmriprep
+      - upload_to_conn
+      - conn_smoothing
+      evidence: explicit
+      source_path: preprocessing.steps
+    - name: normalization_space
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.normalization_space
+    - name: functional_voxel_size
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.functional_voxel_size
+    - name: anatomical_voxel_size
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.anatomical_voxel_size
+    - name: smoothing_fwhm
+      value: 8 mm
+      evidence: explicit
+      source_path: preprocessing.smoothing_fwhm
+    - name: slice_timing_correction
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.slice_timing_correction
+    - name: realignment_unwarp
+      value: null
+      evidence: not_reported
+      source_path: preprocessing.realignment_unwarp
+    - name: outlier_detection
+      value: true
+      evidence: explicit
+      source_path: preprocessing.outlier_detection
+    source_paths:
+    - preprocessing
+  - id: denoising
+    layer: denoising
+    component_id: reported_denoising
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - preprocessed_timeseries
+    provides:
+    - denoised_timeseries
+    parameters:
+    - name: pipeline_default_or_custom
+      value: CONN denoising after fMRIPrep preprocessing
+      evidence: explicit
+      source_path: denoising.pipeline_default_or_custom
+    - name: acompcor
+      value: true
+      evidence: inferred
+      source_path: denoising.acompcor
+      notes: White matter and CSF signal contributions were regressed using five parameters each, consistent
+        with CONN/aCompCor-style denoising, but aCompCor is not named directly in the extracted text.
+    - name: wm_components
+      value: 5
+      evidence: explicit
+      source_path: denoising.wm_components
+    - name: csf_components
+      value: 5
+      evidence: explicit
+      source_path: denoising.csf_components
+    - name: motion_regressors
+      value: '12 parameters: motion realignment parameters and first-order derivatives'
+      evidence: explicit
+      source_path: denoising.motion_regressors
+    - name: scrubbing_regressors
+      value: true
+      evidence: explicit
+      source_path: denoising.scrubbing_regressors
+    - name: global_signal_regression
+      value: false
+      evidence: inferred
+      source_path: denoising.global_signal_regression
+      notes: Global signal change was used for QA/outlier detection; global signal regression was not
+        reported.
+    - name: bandpass_filter
+      value: 0.008-0.09 Hz
+      evidence: explicit
+      source_path: denoising.bandpass_filter
+    - name: detrending_or_session_effects
+      value: linear detrending
+      evidence: explicit
+      source_path: denoising.detrending_or_session_effects
+    - name: effective_dof_reported
+      value: false
+      evidence: not_reported
+      source_path: denoising.effective_dof_reported
+    source_paths:
+    - denoising
+  - id: roi_to_roi
+    layer: first_level_features
+    component_id: roi_to_roi
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: analysis_types
+      value: &id001
+      - roi_to_roi
+      - seed_to_voxel
+      evidence: explicit
+      source_path: connectivity_analysis.analysis_types
+    - name: fc_metric
+      value: bivariate correlation coefficient with Fisher transformation and HRF weighting
+      evidence: explicit
+      source_path: connectivity_analysis.fc_metric
+    - name: roi_or_seed_definition
+      value: CONN predefined networks/ROIs plus left and right hippocampus seeds
+      evidence: explicit
+      source_path: connectivity_analysis.roi_or_seed_definition
+    - name: atlas
+      value: CONN ICA-based networks/ROIs from 497 Human Connectome Project subjects
+      evidence: explicit
+      source_path: connectivity_analysis.atlas
+    - name: network_or_voxel_sampling
+      value: Default-Mode, Dorsal Attention, Salience, Frontoparietal, Sensorimotor; seed-to-voxel maps
+        from left and right hippocampus
+      evidence: explicit
+      source_path: connectivity_analysis.network_or_voxel_sampling
+    source_paths:
+    - connectivity_analysis
+  - id: seed_to_voxel
+    layer: first_level_features
+    component_id: seed_to_voxel
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: analysis_types
+      value: *id001
+      evidence: explicit
+      source_path: connectivity_analysis.analysis_types
+    - name: fc_metric
+      value: bivariate correlation coefficient with Fisher transformation and HRF weighting
+      evidence: explicit
+      source_path: connectivity_analysis.fc_metric
+    - name: roi_or_seed_definition
+      value: CONN predefined networks/ROIs plus left and right hippocampus seeds
+      evidence: explicit
+      source_path: connectivity_analysis.roi_or_seed_definition
+    - name: atlas
+      value: CONN ICA-based networks/ROIs from 497 Human Connectome Project subjects
+      evidence: explicit
+      source_path: connectivity_analysis.atlas
+    - name: network_or_voxel_sampling
+      value: Default-Mode, Dorsal Attention, Salience, Frontoparietal, Sensorimotor; seed-to-voxel maps
+        from left and right hippocampus
+      evidence: explicit
+      source_path: connectivity_analysis.network_or_voxel_sampling
+    source_paths:
+    - connectivity_analysis
+  - id: second_level
+    layer: second_level_inference
+    component_id: reported_statistical_model
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+    parameters:
+    - name: first_level_model
+      value: ROI-to-ROI and seed-to-voxel functional connectivity change from T0 to T6
+      evidence: explicit
+      source_path: statistics.first_level_model
+    - name: second_level_model
+      value: four fractional-factorial intervention models comparing collapsed study arms
+      evidence: explicit
+      source_path: statistics.second_level_model
+    - name: covariates
+      value:
+      - age
+      - sex
+      - years_of_education
+      - number_of_comorbidities
+      evidence: explicit
+      source_path: statistics.covariates
+    - name: multiple_comparison_correction
+      value: ROI-to-ROI cluster p-FDR < 0.05 with connection p-uncorrected < 0.05; seed-to-voxel cluster-size
+        p-FDR < 0.05 with voxel p-uncorrected < 0.001
+      evidence: explicit
+      source_path: statistics.multiple_comparison_correction
+    - name: machine_learning
+      value: false
+      evidence: explicit
+      source_path: statistics.machine_learning
+    source_paths:
+    - statistics
+  - id: qc
+    layer: qc_decision
+    component_id: reported_qc
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters:
+    - name: qc_reported
+      value: true
+      evidence: explicit
+      source_path: qc.qc_reported
+    - name: raw_qc
+      value: raw data visually inspected before organization/preprocessing
+      evidence: explicit
+      source_path: qc.raw_qc
+    - name: preprocessing_qc
+      value: CONN QA plots reviewed after denoising; no additional preprocessing required
+      evidence: explicit
+      source_path: qc.preprocessing_qc
+    - name: denoising_qc
+      value: CONN quality assurance plots for motion, global signal change, and valid scans
+      evidence: explicit
+      source_path: qc.denoising_qc
+    - name: fd_threshold
+      value: 0.5 mm
+      evidence: explicit
+      source_path: qc.fd_threshold
+    - name: global_signal_threshold
+      value: 3 standard deviations
+      evidence: explicit
+      source_path: qc.global_signal_threshold
+    - name: subject_exclusion_rule
+      value: included only participants completing both T0 and T6 MRI; extreme behavioral outliers removed
+        for correlations
+      evidence: explicit
+      source_path: qc.subject_exclusion_rule
+    - name: qc_fc
+      value: false
+      evidence: not_reported
+      source_path: qc.qc_fc
+    - name: qc_success_threshold
+      value: CONN QA plots should score >95%; achieved after original denoising
+      evidence: explicit
+      source_path: qc.qc_success_threshold
+    source_paths:
+    - qc
+  - id: outputs
+    layer: output_export
+    component_id: reported_outputs
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+    parameters:
+    - name: primary_success_signal
+      value: partially_successful
+      evidence: explicit
+      source_path: outcomes.primary_success_signal
+    - name: reported_problems
+      value:
+      - most_roi_to_roi_analyses_not_significant
+      - behavioral_correlations_not_significant_after_fdr
+      - small_number_of_participants_per_arm
+      - no_site_scanner_or_bmi_covariates
+      - roi_and_seed_to_voxel_analyses_not_detailed_a_priori
+      evidence: explicit
+      source_path: outcomes.reported_problems
+    - name: limitations_relevant_to_automation
+      value:
+      - hybrid_fmriprep_conn_pipeline_requires_mapping_external_outputs_into_conn
+      - several acquisition_parameters_not_reported_in_main_text
+      - seed_and_roi_analysis_choices_partly_exploratory
+      - no_conn_batch_script_reported
+      evidence: inferred
+      source_path: outcomes.limitations_relevant_to_automation
+    source_paths:
+    - outcomes
+  edges:
+  - from: input
+    to: preprocessing
+    relation: data
+  - from: preprocessing
+    to: denoising
+    relation: data
+  - from: denoising
+    to: roi_to_roi
+    relation: data
+  - from: denoising
+    to: seed_to_voxel
+    relation: data
+  - from: roi_to_roi
+    to: second_level
+    relation: data
+  - from: seed_to_voxel
+    to: second_level
+    relation: data
+  - from: input
+    to: qc
+    relation: observes
+  - from: denoising
+    to: qc
+    relation: observes
+  - from: roi_to_roi
+    to: qc
+    relation: observes
+  - from: seed_to_voxel
+    to: qc
+    relation: observes
+  - from: second_level
+    to: outputs
+    relation: data
+human_confirmations:
+- raw_data_visual_qc
+- fmriprep_to_conn_import_mapping
+- whether_roi_and_seed_analyses_are_confirmatory_or_exploratory
+- final_covariate_selection
+- interpretation_of_partially_successful_results
+missing_information:
+- tr
+- scan_duration
+- scanner_field_strength
+- number_of_runs
+- normalization_space_from_fmriprep
+- voxel_size
+- exact_conn_batch_or_gui_settings
+- complete_roi_files_or_supplemental_material_machine_readable_paths
+review:
+  source_review_status: structural_methods_verified
+  legacy_schema_shape: canonical_extraction
+  split_into_multiple_instances: false
+  notes:
+  - Normalized from a legacy extraction, not re-verified against the publication.
+  - A reviewer must decide whether branches represent separate pipeline instances.
+  source_sections:
+  - Preprocessing
+  - Region of interest-to-region of interest analysis
+  - Seed-to-voxel (Whole Brain) analysis
+  - Models of analyses
+  provisional_pipeline_count: 1
+  split_decision: keep_shared_preprocessing_with_parallel_analysis_branches
+  confirmed_structure:
+  - fMRIPrep and FSL processing precede import into CONN.
+  - CONN smoothing and denoising feed parallel ROI-to-ROI and seed-to-voxel branches.
+  - Both branches feed longitudinal factorial intervention comparisons.
+  unresolved:
+  - Exact session and condition encoding in the CONN project is not reported.
+  - Acquisition parameters and executable batch configuration remain incomplete.
+  discrepancies:
+  - The legacy index labels the family as unclear, while the methods support longitudinal_pre_post.
+  rejected_components: []
+provenance:
+  source_extraction_ref: test-project/conn-knowledge-builder/extractions/conn_automation/PMID37162700.yaml
+  source_extraction_sha256: 078c73b1662d6abc5e245ec0d5ffc5b2da466eab20c640477abdf6e402e62d81
+  normalizer_version: 0.1.0
+  generated_on: '2026-09-24'

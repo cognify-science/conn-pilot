@@ -4,11 +4,11 @@ from pathlib import Path
 from typing import Any
 
 from .io import write_json
-from .project import safe_identifier
+from .project import execution_identifier
 
 
 def collect_artifacts(project: dict[str, Any], run_dir: Path) -> dict[str, Any]:
-    project_name = safe_identifier(project["project"]["name"])
+    project_name = execution_identifier(project["project"]["name"])
     patterns = {
         "qc_images": (
             f"{project_name}/results/qa/**/*.jpg",
@@ -29,6 +29,7 @@ def collect_artifacts(project: dict[str, Any], run_dir: Path) -> dict[str, Any]:
             "inputs/**/art_*.nii",
             "inputs/**/rp_*.txt",
         ),
+        "qc_metrics": ("qc_metrics.json",),
     }
     groups: dict[str, list[dict[str, Any]]] = {}
     for name, globs in patterns.items():

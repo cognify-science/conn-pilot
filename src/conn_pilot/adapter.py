@@ -4,12 +4,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .project import safe_identifier
+from .project import execution_identifier, safe_identifier
 
 
 def generate_conn_batch(project: dict[str, Any], project_path: Path, run_dir: Path) -> Path:
     run_dir.mkdir(parents=True, exist_ok=True)
-    project_name = safe_identifier(project["project"]["name"])
+    project_name = execution_identifier(project["project"]["name"])
     batch_path = run_dir / f"{project_name}_conn_batch.m"
     batch_path.write_text(_render_batch(project, project_path, run_dir), encoding="utf-8")
     return batch_path
@@ -22,7 +22,7 @@ def _render_batch(project: dict[str, Any], project_path: Path, run_dir: Path) ->
     subjects = project["subjects"]
     design = project["design"]
     seeds = project["seeds"]
-    project_name = safe_identifier(project["project"]["name"])
+    project_name = execution_identifier(project["project"]["name"])
     lines = [
         "% Generated deterministically by CONN Pilot.",
         f"% Source project: {_comment(project_path.as_posix())}",
@@ -89,6 +89,7 @@ def _render_batch(project: dict[str, Any], project_path: Path, run_dir: Path) ->
             "",
         ]
     )
+    lines.extend(_render_qc_metrics(subjects, preprocessing, run_dir))
     lines.extend(_render_results(design["contrasts"], seeds))
     lines.append("")
     return "\n".join(lines)
@@ -106,6 +107,66 @@ def _render_effects(subjects: list[dict[str, Any]], design: dict[str, Any]) -> l
     lines = [f"batch.Setup.subjects.effect_names = {_cell(names)};"]
     for index, vector in enumerate(vectors, start=1):
         lines.append(f"batch.Setup.subjects.effects{{{index}}} = [{'; '.join(_number(item) for item in vector)}];")
+    return lines
+
+
+def _render_qc_metrics(
+    subjects: list[dict[str, Any]], preprocessing: dict[str, Any], run_dir: Path
+) -> list[str]:
+    """Export the ART values needed for auditable subject review as JSON."""
+    lines = [
+        "% Subject-level ART metrics",
+        "clear qc_metrics qc_subjects;",
+        "qc_metrics.schema_version = 'conn_pilot_subject_qc_v1';",
+        f"qc_metrics.thresholds.global_signal_z = {_number(_value(preprocessing, 'global_signal_z_threshold'))};",
+        f"qc_metrics.thresholds.motion_mm = {_number(_value(preprocessing, 'outlier_fd_threshold_mm'))};",
+        "qc_subjects = struct([]);",
+    ]
+    for index, subject in enumerate(subjects, start=1):
+        functional_dir = Path(subject["functional"][0]).parent.as_posix()
+        subject_id = _matlab_string(subject["id"])
+        lines.extend(
+            [
+                f"qc_subjects({index}).subject_id = '{subject_id}';",
+                f"art_outlier_files = dir(fullfile('{_matlab_string(functional_dir)}', 'art_regression_outliers_*.mat'));",
+                "if ~isempty(art_outlier_files), art_outlier_files = art_outlier_files(~contains({art_outlier_files.name}, '_and_movement_')); end",
+                f"art_timeseries_files = dir(fullfile('{_matlab_string(functional_dir)}', 'art_regression_timeseries_*.mat'));",
+                f"art_image_files = dir(fullfile('{_matlab_string(functional_dir)}', 'art_screenshot*.jpg'));",
+                f"qc_subjects({index}).art_image_available = ~isempty(art_image_files);",
+                "if ~isempty(art_outlier_files)",
+                "    art_data = load(fullfile(art_outlier_files(1).folder, art_outlier_files(1).name), 'R');",
+                f"    qc_subjects({index}).volume_count = size(art_data.R, 1);",
+                f"    qc_subjects({index}).outlier_count = sum(any(abs(art_data.R) > eps, 1));",
+                f"    qc_subjects({index}).outlier_percent = 100 * qc_subjects({index}).outlier_count / max(1, qc_subjects({index}).volume_count);",
+                "else",
+                f"    qc_subjects({index}).volume_count = 0;",
+                f"    qc_subjects({index}).outlier_count = 0;",
+                f"    qc_subjects({index}).outlier_percent = 0;",
+                "end",
+                "if ~isempty(art_timeseries_files)",
+                "    art_series = load(fullfile(art_timeseries_files(1).folder, art_timeseries_files(1).name), 'R');",
+                f"    qc_subjects({index}).global_signal_z_max = max(abs(art_series.R(:, 1)));",
+                f"    qc_subjects({index}).motion_max_mm = max(abs(art_series.R(:, 2)));",
+                f"    qc_subjects({index}).motion_mean_mm = mean(abs(art_series.R(:, 2)));",
+                "else",
+                f"    qc_subjects({index}).global_signal_z_max = 0;",
+                f"    qc_subjects({index}).motion_max_mm = 0;",
+                f"    qc_subjects({index}).motion_mean_mm = 0;",
+                "end",
+            ]
+        )
+    metrics_path = _matlab_string((run_dir / "qc_metrics.json").as_posix())
+    lines.extend(
+        [
+            "qc_metrics.subjects = qc_subjects;",
+            f"qc_metrics_file = fopen('{metrics_path}', 'w');",
+            "if qc_metrics_file < 0, error('CONN Pilot could not create qc_metrics.json'); end",
+            "fprintf(qc_metrics_file, '%s', jsonencode(qc_metrics));",
+            "fclose(qc_metrics_file);",
+            "clear art_data art_series art_outlier_files art_timeseries_files art_image_files qc_metrics_file;",
+            "",
+        ]
+    )
     return lines
 
 
@@ -158,4 +219,3 @@ def _vector(values: list[Any]) -> str:
 
 def _cell(values: list[Any]) -> str:
     return "{" + ", ".join(f"'{_matlab_string(value)}'" for value in values) + "}"
-

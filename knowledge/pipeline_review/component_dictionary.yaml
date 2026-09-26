@@ -1,0 +1,776 @@
+schema_version: component_dictionary_v1
+generated_on: '2026-09-24'
+components:
+  clinical_correlation:
+    layer: downstream_analysis
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '38731091'
+    requires:
+    - features_or_group_results
+    provides:
+    - downstream_results
+  conn_external_project_import:
+    layer: input_adapter
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '37371347'
+    requires: []
+    provides:
+    - dataset
+  cortical_complexity:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '39380071'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  cortical_morphometry:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '34194974'
+    - '38782876'
+    - '40685376'
+    - '41088383'
+    - '41652332'
+    - '41920959'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  cortical_parcellation:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '29352808'
+    - '39199437'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  diffusion_connectometry:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '41088383'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  dynamic_connectivity:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '39995218'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  embedded_group_inference:
+    layer: second_level_inference
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '37371347'
+    - '38161799'
+    - '38731091'
+    - '39455948'
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+  external_spm_preprocessing:
+    layer: preprocessing
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '37371347'
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+  falff:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '39455948'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  fmriprep_derivatives_import:
+    layer: input_adapter
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '37162700'
+    requires: []
+    provides:
+    - dataset
+  fsl_dual_regression_intra_network:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '38889524'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  functional_connectivity_distribution_qc:
+    layer: qc_decision
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '37034165'
+    requires: []
+    provides:
+    - qc_decision
+  functional_network_connectivity:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '37265553'
+    - '38385731'
+    - '39020104'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  functional_parcellation:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '38782876'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  functional_structural_dataset:
+    layer: input_adapter
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '23936840'
+    - '24062673'
+    - '28880891'
+    - '29352808'
+    - '31312135'
+    - '32128439'
+    - '32158212'
+    - '32189856'
+    - '32651411'
+    - '33564081'
+    - '34069930'
+    - '34194974'
+    - '34514400'
+    - '37034165'
+    - '37265553'
+    - '38116106'
+    - '38161799'
+    - '38385731'
+    - '38731091'
+    - '38782876'
+    - '38889524'
+    - '38893128'
+    - '39020104'
+    - '39199437'
+    - '39333843'
+    - '39380071'
+    - '39455948'
+    - '39865845'
+    - '39995218'
+    - '40685376'
+    - '40739609'
+    - '40916901'
+    - '41088383'
+    - '41300141'
+    - '41306624'
+    - '41390440'
+    - '41559785'
+    - '41584758'
+    - '41591135'
+    - '41652332'
+    - '41680601'
+    - '41707453'
+    - '41920959'
+    requires: []
+    provides:
+    - dataset
+  graph_theory:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    - external
+    paper_pmids:
+    - '23936840'
+    - '24062673'
+    - '34514400'
+    - '38731091'
+    - '39865845'
+    - '41306624'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  human_confirmation_gate:
+    layer: qc_decision
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - human
+    paper_pmids:
+    - '37371347'
+    - '38161799'
+    - '38731091'
+    - '39455948'
+    - '41306624'
+    requires: []
+    provides:
+    - qc_decision
+  interhemispheric_homotopic_connectivity:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '41088383'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  lesion_mapping:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '40916901'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  machine_learning_classification:
+    layer: downstream_analysis
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '41306624'
+    requires:
+    - features_or_group_results
+    provides:
+    - downstream_results
+  mvpa_roi_definition:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '38889524'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  neuromark_ica:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '39995218'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  ppi_or_gppi:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '38116106'
+    - '41300141'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  qc_fc_correlations:
+    layer: qc_decision
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '37034165'
+    requires: []
+    provides:
+    - qc_decision
+  reported_denoising:
+    layer: denoising
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '23936840'
+    - '24062673'
+    - '28880891'
+    - '29352808'
+    - '31312135'
+    - '32128439'
+    - '32158212'
+    - '32189856'
+    - '32651411'
+    - '33564081'
+    - '34069930'
+    - '34194974'
+    - '34514400'
+    - '37034165'
+    - '37162700'
+    - '37265553'
+    - '37371347'
+    - '38116106'
+    - '38161799'
+    - '38385731'
+    - '38731091'
+    - '38782876'
+    - '38889524'
+    - '38893128'
+    - '39020104'
+    - '39199437'
+    - '39333843'
+    - '39380071'
+    - '39455948'
+    - '39865845'
+    - '39995218'
+    - '40685376'
+    - '40739609'
+    - '40916901'
+    - '41088383'
+    - '41300141'
+    - '41390440'
+    - '41559785'
+    - '41584758'
+    - '41591135'
+    - '41652332'
+    - '41680601'
+    - '41707453'
+    - '41920959'
+    requires:
+    - preprocessed_timeseries
+    provides:
+    - denoised_timeseries
+  reported_outputs:
+    layer: output_export
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - hybrid
+    paper_pmids:
+    - '23936840'
+    - '24062673'
+    - '28880891'
+    - '29352808'
+    - '31312135'
+    - '32128439'
+    - '32158212'
+    - '32189856'
+    - '32651411'
+    - '33564081'
+    - '34069930'
+    - '34194974'
+    - '34514400'
+    - '37034165'
+    - '37162700'
+    - '37265553'
+    - '37371347'
+    - '38116106'
+    - '38161799'
+    - '38385731'
+    - '38731091'
+    - '38782876'
+    - '38889524'
+    - '38893128'
+    - '39020104'
+    - '39199437'
+    - '39333843'
+    - '39380071'
+    - '39455948'
+    - '39865845'
+    - '39995218'
+    - '40685376'
+    - '40739609'
+    - '40916901'
+    - '41088383'
+    - '41300141'
+    - '41306624'
+    - '41390440'
+    - '41559785'
+    - '41584758'
+    - '41591135'
+    - '41652332'
+    - '41680601'
+    - '41707453'
+    - '41920959'
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+  reported_preprocessing:
+    layer: preprocessing
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    - external
+    - hybrid
+    paper_pmids:
+    - '23936840'
+    - '24062673'
+    - '28880891'
+    - '29352808'
+    - '31312135'
+    - '32128439'
+    - '32158212'
+    - '32189856'
+    - '32651411'
+    - '33564081'
+    - '34069930'
+    - '34194974'
+    - '34514400'
+    - '37034165'
+    - '37162700'
+    - '37265553'
+    - '38116106'
+    - '38161799'
+    - '38385731'
+    - '38731091'
+    - '38782876'
+    - '38889524'
+    - '38893128'
+    - '39020104'
+    - '39199437'
+    - '39333843'
+    - '39380071'
+    - '39455948'
+    - '39865845'
+    - '39995218'
+    - '40685376'
+    - '40739609'
+    - '40916901'
+    - '41088383'
+    - '41300141'
+    - '41306624'
+    - '41390440'
+    - '41559785'
+    - '41584758'
+    - '41591135'
+    - '41652332'
+    - '41680601'
+    - '41707453'
+    - '41920959'
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+  reported_qc:
+    layer: qc_decision
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - hybrid
+    paper_pmids:
+    - '23936840'
+    - '24062673'
+    - '28880891'
+    - '29352808'
+    - '31312135'
+    - '32128439'
+    - '32158212'
+    - '32189856'
+    - '32651411'
+    - '33564081'
+    - '34069930'
+    - '34194974'
+    - '34514400'
+    - '37034165'
+    - '37162700'
+    - '37265553'
+    - '38116106'
+    - '38385731'
+    - '38782876'
+    - '38889524'
+    - '38893128'
+    - '39020104'
+    - '39199437'
+    - '39333843'
+    - '39380071'
+    - '39865845'
+    - '39995218'
+    - '40685376'
+    - '40739609'
+    - '40916901'
+    - '41088383'
+    - '41300141'
+    - '41390440'
+    - '41559785'
+    - '41584758'
+    - '41591135'
+    - '41652332'
+    - '41680601'
+    - '41707453'
+    - '41920959'
+    requires: []
+    provides:
+    - qc_decision
+  reported_statistical_model:
+    layer: second_level_inference
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '23936840'
+    - '24062673'
+    - '28880891'
+    - '29352808'
+    - '31312135'
+    - '32128439'
+    - '32158212'
+    - '32189856'
+    - '32651411'
+    - '33564081'
+    - '34069930'
+    - '34194974'
+    - '34514400'
+    - '37034165'
+    - '37162700'
+    - '37265553'
+    - '38116106'
+    - '38385731'
+    - '38782876'
+    - '38889524'
+    - '38893128'
+    - '39020104'
+    - '39199437'
+    - '39333843'
+    - '39380071'
+    - '39865845'
+    - '39995218'
+    - '40685376'
+    - '40739609'
+    - '40916901'
+    - '41088383'
+    - '41300141'
+    - '41390440'
+    - '41559785'
+    - '41584758'
+    - '41591135'
+    - '41652332'
+    - '41680601'
+    - '41707453'
+    - '41920959'
+    requires:
+    - first_level_features
+    provides:
+    - group_inference
+  roi_to_roi:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '23936840'
+    - '24062673'
+    - '29352808'
+    - '32128439'
+    - '32158212'
+    - '32189856'
+    - '32651411'
+    - '33564081'
+    - '34069930'
+    - '34514400'
+    - '37162700'
+    - '37265553'
+    - '37371347'
+    - '38385731'
+    - '38731091'
+    - '38889524'
+    - '39020104'
+    - '39333843'
+    - '39455948'
+    - '39865845'
+    - '39995218'
+    - '41559785'
+    - '41584758'
+    - '41591135'
+    - '41652332'
+    - '41920959'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  roi_to_voxel:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '38889524'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  seed_to_seed:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '40916901'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  seed_to_voxel:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '23936840'
+    - '24062673'
+    - '28880891'
+    - '31312135'
+    - '32189856'
+    - '34194974'
+    - '37162700'
+    - '38161799'
+    - '38731091'
+    - '38782876'
+    - '38893128'
+    - '39199437'
+    - '39333843'
+    - '39380071'
+    - '40685376'
+    - '40739609'
+    - '40916901'
+    - '41300141'
+    - '41390440'
+    - '41584758'
+    - '41652332'
+    - '41680601'
+    - '41707453'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  spm_project_import:
+    layer: input_adapter
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '37371347'
+    requires: []
+    provides:
+    - dataset
+  structural_vbm:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '32651411'
+    - '40739609'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  task_activation_glm:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - external
+    paper_pmids:
+    - '23936840'
+    - '34069930'
+    - '34194974'
+    - '38893128'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+  voxel_to_voxel_or_mvpa:
+    layer: first_level_features
+    status: observed
+    scientific_review_status: pending
+    execution_contexts:
+    - conn
+    paper_pmids:
+    - '39333843'
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features

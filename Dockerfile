@@ -2,7 +2,8 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    CONN_PILOT_CATALOG=/app/catalog
+    CONN_PILOT_CATALOG=/app/catalog \
+    CONN_PILOT_LITERATURE_ROOT=/app/knowledge/pipeline_review
 
 WORKDIR /app
 COPY pyproject.toml README.md ./

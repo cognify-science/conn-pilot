@@ -17,7 +17,7 @@ from conn_pilot.adapter import generate_conn_batch  # noqa: E402
 from conn_pilot.catalog import Catalog  # noqa: E402
 from conn_pilot.errors import ExecutionError  # noqa: E402
 from conn_pilot.jobs import JobStore, verify_outputs  # noqa: E402
-from conn_pilot.project import validate_project  # noqa: E402
+from conn_pilot.project import execution_identifier, validate_project  # noqa: E402
 from conn_pilot.results import collect_artifacts  # noqa: E402
 from conn_pilot.staging import stage_project_inputs  # noqa: E402
 
@@ -31,6 +31,25 @@ class EngineTests(unittest.TestCase):
 
     def test_catalog_is_valid(self) -> None:
         self.assertEqual(self.catalog.validate_all(), [])
+
+    def test_execution_identifier_is_short_stable_and_collision_resistant(self) -> None:
+        first = execution_identifier("railway_parameter_resolver_pilot_20260926")
+        second = execution_identifier("railway_parameter_resolver_pilot_20260927")
+        self.assertLessEqual(len(first), 24)
+        self.assertEqual(first, execution_identifier("railway_parameter_resolver_pilot_20260926"))
+        self.assertNotEqual(first, second)
+
+    def test_long_project_name_uses_short_identifier_in_batch_paths(self) -> None:
+        project = copy.deepcopy(self.project)
+        project["project"]["name"] = "railway_parameter_resolver_pilot_20260926"
+        with tempfile.TemporaryDirectory() as directory:
+            target = generate_conn_batch(
+                project, ROOT / "examples/project.template.yaml", Path(directory)
+            )
+            text = target.read_text(encoding="utf-8")
+        identifier = execution_identifier(project["project"]["name"])
+        self.assertEqual(target.name, f"{identifier}_conn_batch.m")
+        self.assertIn(f"'{identifier}.mat'", text)
 
     def test_template_project_is_structurally_valid(self) -> None:
         result = validate_project(self.project, self.pipeline, check_paths=False)
@@ -83,6 +102,9 @@ class EngineTests(unittest.TestCase):
         self.assertIn("batch.Denoising.filter = [0.008 0.09];", text)
         self.assertIn("batch.Denoising.detrending = 1;", text)
         self.assertIn("batch.Denoising.despiking = 0;", text)
+        self.assertIn("conn_pilot_subject_qc_v1", text)
+        self.assertIn("art_regression_timeseries_*.mat", text)
+        self.assertIn("qc_metrics.json", text)
         self.assertIn("atlas.Amygdala l", text)
 
     def test_two_group_design_with_covariate_is_rendered(self) -> None:

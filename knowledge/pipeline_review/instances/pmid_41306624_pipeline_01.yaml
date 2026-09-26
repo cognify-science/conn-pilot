@@ -1,0 +1,411 @@
+schema_version: pipeline_instance_v1
+instance_id: pmid_41306624_pipeline_01
+instance_scope: provisional_paper_level
+paper:
+  pmid: '41306624'
+  pmcid: PMC12646346
+  doi: 10.4103/jrms.jrms_406_24
+  title: Comparison of the performance of machine learning algorithms for the task-switching functional
+    magnetic resonance imaging data for distinguishing attention deficit hyperactivity disorder from bipolar
+    disorder
+  year: 2025
+classification:
+  primary_family: machine_learning_features
+  study_design: Cross-sectional classification study using task fMRI
+  modality_or_task: Task-switching
+  normalization_status: structurally_verified
+software_environment:
+- name: CONN
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.conn_version
+- name: SPM
+  version: null
+  evidence: not_reported
+  source_path: conn_usage.spm_version
+- name: MATLAB
+  version: R2022b
+  evidence: inferred
+  source_path: conn_usage.matlab_version
+  notes: Legacy extraction did not encode field-level evidence; verify against the source.
+graph:
+  nodes:
+  - id: input
+    layer: input_adapter
+    component_id: functional_structural_dataset
+    execution_context: conn
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - dataset
+    parameters:
+    - name: clinical_domain
+      value: Neuropsychiatric differential diagnosis
+      evidence: inferred
+      source_path: study_context.clinical_domain
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: population.sample_size_total
+      value: 89
+      evidence: inferred
+      source_path: study_context.population.sample_size_total
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: population.groups
+      value:
+      - name: Bipolar disorder
+        n: 49
+      - name: Attention deficit hyperactivity disorder
+        n: 40
+      evidence: inferred
+      source_path: study_context.population.groups
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: population.age_range
+      value: 21-50 years
+      evidence: inferred
+      source_path: study_context.population.age_range
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: population.mean_age
+      value: 33.23
+      evidence: inferred
+      source_path: study_context.population.mean_age
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: population.median_age
+      value: 31.0
+      evidence: inferred
+      source_path: study_context.population.median_age
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: population.source_dataset
+      value: OpenNeuro
+      evidence: inferred
+      source_path: study_context.population.source_dataset
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: design
+      value: Cross-sectional classification study using task fMRI
+      evidence: inferred
+      source_path: study_context.design
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: task.name
+      value: Task-switching
+      evidence: inferred
+      source_path: study_context.task.name
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: task.conditions
+      value:
+      - green circle
+      - red circle
+      - green triangle
+      - red triangle
+      evidence: inferred
+      source_path: study_context.task.conditions
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - study_context
+  - id: preprocessing
+    layer: preprocessing
+    component_id: reported_preprocessing
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - dataset
+    provides:
+    - preprocessed_timeseries
+    parameters:
+    - name: reported_steps
+      value:
+      - Field map modification for distortion reduction
+      - Slice timing correction
+      - Realignment for head motion correction
+      - Functional-structural coregistration
+      - Segmentation for bias correction
+      - Spatial normalization to MNI space
+      - Gaussian spatial smoothing
+      evidence: inferred
+      source_path: conn_usage.preprocessing.reported_steps
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: smoothing_fwhm_mm
+      value: 6
+      evidence: inferred
+      source_path: conn_usage.preprocessing.smoothing_fwhm_mm
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: missing_details
+      value:
+      - CONN version
+      - Exact CONN preprocessing pipeline preset or batch settings
+      - Motion/outlier thresholds
+      - Denoising regressors
+      - Temporal filtering parameters
+      - Whether task effects were regressed during denoising
+      evidence: inferred
+      source_path: conn_usage.preprocessing.missing_details
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.preprocessing
+  - id: graph_theory
+    layer: first_level_features
+    component_id: graph_theory
+    execution_context: conn
+    status: observed
+    optional: false
+    requires:
+    - denoised_or_preprocessed_timeseries
+    provides:
+    - first_level_features
+    parameters:
+    - name: software
+      value: CONN toolbox in MATLAB
+      evidence: inferred
+      source_path: conn_usage.graph_theory.software
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: unit_of_analysis
+      value: Node-level graph metrics from adjacency matrices
+      evidence: inferred
+      source_path: conn_usage.graph_theory.unit_of_analysis
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: conditions
+      value:
+      - green circle
+      - red circle
+      - green triangle
+      - red triangle
+      evidence: inferred
+      source_path: conn_usage.graph_theory.conditions
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: metrics
+      value:
+      - local efficiency
+      - betweenness centrality
+      - cost
+      - average path length
+      - clustering coefficient
+      - global efficiency
+      - degree
+      evidence: inferred
+      source_path: conn_usage.graph_theory.metrics
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: missing_details
+      value:
+      - Connectivity measure used to build adjacency matrices
+      - Graph thresholding or cost range
+      - Weighted vs binary graph configuration
+      - Positive-only vs signed connectivity handling
+      - Exact first-level task/condition modeling in CONN
+      evidence: inferred
+      source_path: conn_usage.graph_theory.missing_details
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - conn_usage.graph_theory
+  - id: machine_learning
+    layer: downstream_analysis
+    component_id: machine_learning_classification
+    execution_context: external
+    status: observed
+    optional: false
+    requires:
+    - features_or_group_results
+    provides:
+    - downstream_results
+    parameters:
+    - name: goal
+      value: Classify ADHD vs bipolar disorder
+      evidence: inferred
+      source_path: machine_learning.goal
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: feature_source
+      value: CONN graph-theory metrics across 15 attention-network regions and four task conditions
+      evidence: inferred
+      source_path: machine_learning.feature_source
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: total_initial_features
+      value: 420
+      evidence: inferred
+      source_path: machine_learning.total_initial_features
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: additional_features
+      value:
+      - age
+      - gender
+      evidence: inferred
+      source_path: machine_learning.additional_features
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: feature_selection.method
+      value: Genetic algorithm
+      evidence: inferred
+      source_path: machine_learning.feature_selection.method
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: feature_selection.initial_population_size
+      value: 50
+      evidence: inferred
+      source_path: machine_learning.feature_selection.initial_population_size
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: feature_selection.fitness_function
+      value: Random forest classification accuracy
+      evidence: inferred
+      source_path: machine_learning.feature_selection.fitness_function
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: feature_selection.selected_iteration
+      value: 3
+      evidence: inferred
+      source_path: machine_learning.feature_selection.selected_iteration
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: feature_selection.selected_feature_count
+      value: 57
+      evidence: inferred
+      source_path: machine_learning.feature_selection.selected_feature_count
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: feature_selection.reported_best_accuracy_percent
+      value: 99.78
+      evidence: inferred
+      source_path: machine_learning.feature_selection.reported_best_accuracy_percent
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: feature_selection.leakage_risk
+      value: Unclear whether feature selection was nested inside cross-validation.
+      evidence: inferred
+      source_path: machine_learning.feature_selection.leakage_risk
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: validation.method
+      value: 10-fold cross-validation
+      evidence: inferred
+      source_path: machine_learning.validation.method
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: validation.missing_details
+      value:
+      - Whether cross-validation was subject-level stratified
+      - Whether feature selection was repeated inside each training fold
+      - Random seed
+      - Train/test split or held-out validation
+      evidence: inferred
+      source_path: machine_learning.validation.missing_details
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: models
+      value:
+      - name: RBF-SVM
+        accuracy_percent: 88.2
+        sensitivity_percent: 89.7
+        specificity_percent: 87.5
+        auc: 0.894
+      - name: Polynomial-SVM
+        accuracy_percent: 87.6
+        sensitivity_percent: 91.0
+        specificity_percent: 85.0
+        auc: 0.882
+      - name: SVM-MK
+        description: SVM with mixed RBF and polynomial kernels
+        accuracy_percent: 92.1
+        sensitivity_percent: 92.6
+        specificity_percent: 97.3
+        auc: 0.931
+      - name: ENN
+        accuracy_percent: 90.0
+        sensitivity_percent: 88.1
+        specificity_percent: 92.3
+        auc: 0.912
+      evidence: inferred
+      source_path: machine_learning.models
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    - name: result_discrepancies
+      value:
+      - The results table reports SVM-MK accuracy of 92.1%, while the discussion text reports much higher
+        values for SVM-MK. This should be verified manually before using the study as a benchmark.
+      evidence: inferred
+      source_path: machine_learning.result_discrepancies
+      notes: Legacy extraction did not encode field-level evidence; verify against the source.
+    source_paths:
+    - machine_learning
+  - id: human_review
+    layer: qc_decision
+    component_id: human_confirmation_gate
+    execution_context: human
+    status: observed
+    optional: false
+    requires: []
+    provides:
+    - qc_decision
+    parameters: []
+    source_paths:
+    - automation_assessment.cannot_automate_reliably_without_human_confirmation
+  - id: outputs
+    layer: output_export
+    component_id: reported_outputs
+    execution_context: hybrid
+    status: observed
+    optional: false
+    requires:
+    - analysis_results
+    provides:
+    - reported_outputs
+    parameters: []
+    source_paths:
+    - results_relevant_to_automation
+  edges:
+  - from: input
+    to: preprocessing
+    relation: data
+  - from: preprocessing
+    to: graph_theory
+    relation: data
+  - from: graph_theory
+    to: machine_learning
+    relation: data
+  - from: preprocessing
+    to: human_review
+    relation: observes
+  - from: graph_theory
+    to: human_review
+    relation: observes
+  - from: machine_learning
+    to: outputs
+    relation: data
+human_confirmations:
+- Exact ROI definitions/files
+- CONN version and batch settings
+- Task condition setup in first-level analysis
+- Adjacency matrix and graph-threshold settings
+- Denoising and temporal-filtering configuration
+- ML hyperparameters
+- Nested validation protocol for genetic feature selection
+missing_information:
+- CONN version
+- Exact CONN preprocessing pipeline preset or batch settings
+- Motion/outlier thresholds
+- Denoising regressors
+- Temporal filtering parameters
+- Whether task effects were regressed during denoising
+- Exact ROI names and coordinates should be extracted from the paper table before automation.
+- Atlas or custom ROI files are not fully captured in this extraction.
+- Connectivity measure used to build adjacency matrices
+- Graph thresholding or cost range
+- Weighted vs binary graph configuration
+- Positive-only vs signed connectivity handling
+- Exact first-level task/condition modeling in CONN
+review:
+  source_review_status: structural_methods_verified
+  legacy_schema_shape: custom_deep_extraction
+  split_into_multiple_instances: false
+  notes:
+  - Normalized from a legacy extraction, not re-verified against the publication.
+  - A reviewer must decide whether branches represent separate pipeline instances.
+  source_sections:
+  - Image data preprocessing
+  - Brain mapping
+  - Feature extraction
+  - Feature selection using genetic algorithm
+  - Compare the performance of models
+  provisional_pipeline_count: 1
+  split_decision: keep_conn_feature_generation_linked_to_external_ml
+  confirmed_structure:
+  - CONN preprocessing precedes graph metrics for 15 ROIs and four task conditions.
+  - Graph metrics and demographics form 420 candidate features.
+  - Genetic feature selection and classifier comparison are external downstream stages.
+  unresolved:
+  - ROI definitions, denoising, connectivity metric and graph threshold are not sufficiently reported.
+  - It is unclear whether feature selection is nested inside cross-validation.
+  discrepancies:
+  - Classification accuracy differs between the results table and discussion text; it cannot be used as
+    a benchmark without resolution.
+  rejected_components: []
+provenance:
+  source_extraction_ref: test-project/conn-knowledge-builder/extractions/conn_automation/PMID41306624.yaml
+  source_extraction_sha256: 48f99b39670bfcb51f3571c354e0a6e8aba28944f05c10b6a5889122077d9dbe
+  normalizer_version: 0.1.0
+  generated_on: '2026-09-24'

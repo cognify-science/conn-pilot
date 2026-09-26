@@ -14,7 +14,7 @@ from .adapter import generate_conn_batch
 from .environment import _matlab_environment
 from .errors import ExecutionError
 from .io import sha256_file, write_json, write_yaml
-from .project import safe_identifier
+from .project import execution_identifier
 from .results import collect_artifacts
 from .staging import stage_project_inputs
 
@@ -126,7 +126,7 @@ def queue_project(
     run_root: Path,
 ) -> dict[str, Any]:
     """Persist an immutable job request without starting MATLAB."""
-    project_name = safe_identifier(project["project"]["name"])
+    project_name = execution_identifier(project["project"]["name"])
     provisional = run_root / project_name / "pending"
     job_id = store.create(project, provisional)
     run_dir = run_root / project_name / job_id
@@ -197,7 +197,7 @@ def execute_queued_project(
 
 
 def verify_outputs(project: dict[str, Any], run_dir: Path) -> dict[str, Any]:
-    name = safe_identifier(project["project"]["name"])
+    name = execution_identifier(project["project"]["name"])
     project_dir = run_dir / name
     expected = {
         "conn_project": run_dir / f"{name}.mat",
