@@ -24,6 +24,15 @@ Las decisiones científicas sobre sujetos quedan siempre a cargo de un investiga
 - Generación CONN QA real para registration, normalization, segmentation,
   ART y denoising sobre el sandbox.
 - Despliegue remoto con PostgreSQL, almacenamiento S3 y worker local supervisado.
+- Ejecución remota `df9e93c8add944578f62bf9e53f17bd8`, resultado
+  `sha256:fb54f0b029e03ac52716f4e099400119b21137c3fdf99a01f59b76320ec7f209`:
+  completó en 52 min 42 s, cargó 36 artefactos (46,700,689 bytes), incluyó
+  21 imágenes QC y publicó siete evidencias visuales por sujeto.
+- Prueba del portal temporal y su API sobre esa ejecución: HTTP 200 y job
+  correctamente acotado por token. Las 31 herramientas MCP quedaron publicadas.
+- `get_system_health` confirmó almacenamiento disponible, worker online y sistema
+  listo para ejecutar. El paquete reproducible rechazó su creación mientras el QC
+  científico permanecía incompleto, como exige el contrato.
 
 ## Límites conocidos
 
