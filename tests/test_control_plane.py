@@ -141,6 +141,20 @@ class FakeStore:
         self.jobs[value["id"]] = value
         return value
 
+    def get_reusable_job_for_project(
+        self, project_id: str, subject: str
+    ) -> dict[str, Any] | None:
+        return next(
+            (
+                value
+                for value in reversed(list(self.jobs.values()))
+                if value["project_id"] == project_id
+                and value["owner_subject"] == subject
+                and value["state"] in {"queued", "running", "succeeded"}
+            ),
+            None,
+        )
+
     def retry_job(self, job_id: str, subject: str) -> dict[str, Any]:
         value = self.get_job(job_id, subject)
         if not value or value["state"] != "failed":
@@ -537,6 +551,9 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             tools,
             {
+                "get_product_capabilities",
+                "start_available_flow",
+                "run_available_flow",
                 "list_pipelines",
                 "list_datasets",
                 "get_system_health",
@@ -574,6 +591,102 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(datasets.structured_content["data"]["count"], 1)
         self.assertGreater(topics.structured_content["data"]["count"], 1)
         self.assertEqual(guidance.structured_content["data"]["returned_count"], 2)
+
+    def test_guided_product_flow_is_discoverable_and_stops_for_scientific_choices(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(
+            store, ROOT / "catalog", require_literature_decisions=True
+        )
+        capabilities = service.get_product_capabilities(storage_available=True)
+        self.assertTrue(capabilities["data"]["ready_for_execution"])
+        flow = capabilities["data"]["guided_flows"][0]
+        self.assertEqual(flow["id"], "rsfmri_seed_to_voxel_one_sample_v1")
+        self.assertEqual(flow["availability"][0]["dataset_id"], "study_001")
+        self.assertTrue(flow["availability"][0]["available"])
+        self.assertEqual(
+            {item["id"] for item in flow["seed_options"]},
+            {"left_amygdala", "right_amygdala"},
+        )
+
+        started = service.start_available_flow(
+            "researcher-1",
+            flow["id"],
+            "study_001",
+            "guided-pilot",
+            "Estimate mean amygdala connectivity.",
+            ["left_amygdala"],
+            True,
+        )
+        self.assertEqual(started["data"]["status"], "needs_parameter_decisions")
+        self.assertEqual(started["data"]["unresolved_parameter_count"], 7)
+        self.assertEqual(
+            started["data"]["next_action"]["tool"], "get_project_parameter_guidance"
+        )
+        project = started["data"]["project"]
+        self.assertEqual(project["owner_subject"], "researcher-1")
+        self.assertEqual(project["spec"]["design"]["groups"]["sample"], ["sub-001"])
+        self.assertEqual(project["spec"]["seeds"][0]["conn_source"], "atlas.Amygdala l")
+
+        blocked = service.run_available_flow("researcher-1", project["id"])
+        self.assertTrue(blocked["ok"])
+        self.assertEqual(blocked["data"]["status"], "needs_parameter_decisions")
+        self.assertEqual(store.jobs, {})
+
+    def test_guided_flow_rejects_unpublished_seed(self) -> None:
+        service = ControlPlaneService(FakeStore(), ROOT / "catalog")
+        with self.assertRaisesRegex(ValueError, "Unknown seed_ids"):
+            service.start_available_flow(
+                "owner", "rsfmri_seed_to_voxel_one_sample_v1", "study_001",
+                "guided-pilot", "Question", ["hippocampus"], True,
+            )
+
+    def test_run_available_flow_queues_a_fully_documented_project(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(
+            store, ROOT / "catalog", require_literature_decisions=True
+        )
+        project = service.create_project(
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+        )["data"]["project"]
+        pipeline = service.catalog.resolve("rsfmri_seed_to_voxel", "1.0.0")
+        for index, (path, specification) in enumerate(
+            pipeline.definition["project_contract"]["parameters"].items(), start=1
+        ):
+            guidance = specification.get("literature_guidance") or {}
+            if not guidance.get("required_remote"):
+                continue
+            target = project["spec"]["parameters"]
+            parts = path.split(".")
+            for part in parts[:-1]:
+                target = target[part]
+            record = target[parts[-1]]
+            decision_id = f"documented-{index}"
+            record.update(
+                method_decision_id=decision_id,
+                evidence_ids=[f"evidence-{index}"],
+                corpus_version="corpus-v1",
+                confirmed_by_investigator=True,
+            )
+            store.method_decisions.append(
+                {
+                    "id": decision_id,
+                    "owner_subject": "owner",
+                    "project_id": project["id"],
+                    "parameter_path": path,
+                    "selected_value": record["value"],
+                    "evidence_ids": record["evidence_ids"],
+                    "corpus_version": record["corpus_version"],
+                }
+            )
+        response = service.run_available_flow("owner", project["id"])
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["status"], "queued")
+        self.assertEqual(response["data"]["next_action"]["tool"], "get_job_status")
+        self.assertEqual(response["data"]["job"]["phase"], "waiting_for_worker")
+        repeated = service.run_available_flow("owner", project["id"])
+        self.assertTrue(repeated["data"]["reused_existing_job"])
+        self.assertEqual(repeated["data"]["job"]["id"], response["data"]["job"]["id"])
+        self.assertEqual(len(store.jobs), 1)
 
     def test_subject_qc_decisions_are_versioned_and_keep_review_layers_separate(self) -> None:
         store = FakeStore()

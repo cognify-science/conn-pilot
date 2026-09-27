@@ -44,6 +44,12 @@ from .portal import review_portal_html
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTROL_RESPONSE_SCHEMA = "conn_pilot_control_response_v1"
 REMOTE_SPEC_FIELDS = {"project", "design", "seeds", "parameters"}
+GUIDED_FLOW_ID = "rsfmri_seed_to_voxel_one_sample_v1"
+GUIDED_PIPELINE = ("rsfmri_seed_to_voxel", "1.0.0")
+GUIDED_SEEDS = {
+    "left_amygdala": "atlas.Amygdala l",
+    "right_amygdala": "atlas.Amygdala r",
+}
 LOGGER = logging.getLogger(__name__)
 
 
@@ -65,6 +71,9 @@ class Store(Protocol):
     def get_project(self, project_id: str, subject: str | None = None) -> dict[str, Any] | None: ...
     def save_validation(self, project_id: str, validation: dict[str, Any]) -> None: ...
     def create_job(self, project: dict[str, Any]) -> dict[str, Any]: ...
+    def get_reusable_job_for_project(
+        self, project_id: str, subject: str
+    ) -> dict[str, Any] | None: ...
     def get_job(self, job_id: str, subject: str | None = None) -> dict[str, Any] | None: ...
     def get_events(self, job_id: str, subject: str) -> list[dict[str, Any]]: ...
     def list_artifacts(self, job_id: str, subject: str) -> list[dict[str, Any]]: ...
@@ -354,6 +363,250 @@ class ControlPlaneService:
             storage_available and any(item.get("online") for item in health["workers"])
         )
         return _response("get_system_health", health)
+
+    def get_product_capabilities(self, storage_available: bool) -> dict[str, Any]:
+        """Describe the usable product surface and dataset-specific guided flows."""
+        health = self.store.get_system_health()
+        workers = {str(item.get("id")): item for item in health.get("workers", [])}
+        datasets = self.store.list_datasets()
+        pipeline = self.catalog.resolve(*GUIDED_PIPELINE)
+        availability = []
+        for dataset in datasets:
+            reasons: list[str] = []
+            metadata = dataset.get("metadata") or {}
+            if dataset.get("status") != "ready":
+                reasons.append("dataset_not_ready")
+            if metadata.get("layout") != "bids":
+                reasons.append("bids_layout_required")
+            worker = workers.get(str(dataset.get("worker_id")))
+            if not worker or not worker.get("online"):
+                reasons.append("assigned_worker_offline")
+            if not storage_available:
+                reasons.append("artifact_storage_unavailable")
+            availability.append(
+                {
+                    "dataset_id": dataset["id"],
+                    "dataset_label": dataset.get("label"),
+                    "subject_count": metadata.get("subject_count"),
+                    "worker_id": dataset.get("worker_id"),
+                    "available": not reasons,
+                    "unavailable_reasons": reasons,
+                }
+            )
+        guided_parameters = [
+            path
+            for path, specification in pipeline.definition["project_contract"]
+            .get("parameters", {})
+            .items()
+            if (specification.get("literature_guidance") or {}).get("required_remote")
+        ]
+        flow = {
+            "id": GUIDED_FLOW_ID,
+            "label": "Resting-state amygdala seed-to-voxel, one sample",
+            "description": pipeline.definition.get("description", ""),
+            "pipeline": {"id": pipeline.id, "version": pipeline.version},
+            "design": "one_sample",
+            "input": {"layout": "bids", "state": "raw", "sessions_per_subject": 1},
+            "seed_options": [
+                {"id": seed_id, "conn_source": source}
+                for seed_id, source in GUIDED_SEEDS.items()
+            ],
+            "stages": [stage["id"] for stage in pipeline.stages],
+            "investigator_parameter_decisions": guided_parameters,
+            "outputs": [
+                "subject_qc_images_and_metrics",
+                "first_level_seed_to_voxel_maps",
+                "versioned_second_level_results",
+                "reproducibility_package",
+            ],
+            "limitations": pipeline.definition.get("scope", {}).get("limitations", []),
+            "availability": availability,
+            "start_tool": "start_available_flow",
+        }
+        return _response(
+            "get_product_capabilities",
+            {
+                "product": "CONN Pilot",
+                "interaction_modes": {
+                    "codex_mcp": "complete_workflow",
+                    "review_portal": "optional_visual_review",
+                },
+                "capabilities": [
+                    "literature_guided_parameter_selection",
+                    "validated_conn_execution",
+                    "subject_level_quality_review",
+                    "versioned_sample_recalculation",
+                    "scientific_acceptance",
+                    "reproducibility_export",
+                ],
+                "guided_flows": [flow],
+                "guided_flow_count": 1,
+                "ready_for_execution": any(item["available"] for item in availability),
+                "workflow": [
+                    "get_product_capabilities",
+                    "start_available_flow",
+                    "resolve_project_parameter",
+                    "run_available_flow",
+                    "get_job_status",
+                    "get_subject_qc",
+                    "set_subject_qc_decision",
+                    "request_second_level_recalculation_if_sample_changed",
+                    "record_scientific_decision",
+                    "generate_reproducibility_package",
+                ],
+            },
+        )
+
+    def start_available_flow(
+        self,
+        subject: str,
+        flow_id: str,
+        dataset_id: str,
+        project_name: str,
+        research_question: str,
+        seed_ids: list[str],
+        storage_available: bool,
+    ) -> dict[str, Any]:
+        if flow_id != GUIDED_FLOW_ID:
+            raise ValueError(f"Unknown guided flow: {flow_id}")
+        if not isinstance(project_name, str) or not project_name.strip():
+            raise ValueError("project_name is required")
+        if not isinstance(research_question, str) or not research_question.strip():
+            raise ValueError("research_question is required")
+        if not isinstance(seed_ids, list) or not seed_ids:
+            raise ValueError("Select at least one seed_id from the published seed options")
+        selected = list(dict.fromkeys(str(value) for value in seed_ids))
+        unknown = sorted(set(selected) - set(GUIDED_SEEDS))
+        if unknown:
+            raise ValueError(f"Unknown seed_ids: {', '.join(unknown)}")
+        dataset = self._dataset(dataset_id)
+        health = self.store.get_system_health()
+        worker = next(
+            (item for item in health.get("workers", [])
+             if str(item.get("id")) == str(dataset.get("worker_id"))),
+            None,
+        )
+        unavailable = []
+        if dataset.get("status") != "ready":
+            unavailable.append("dataset_not_ready")
+        if (dataset.get("metadata") or {}).get("layout") != "bids":
+            unavailable.append("bids_layout_required")
+        if not worker or not worker.get("online"):
+            unavailable.append("assigned_worker_offline")
+        if not storage_available:
+            unavailable.append("artifact_storage_unavailable")
+        if unavailable:
+            raise ValueError("Flow is not currently available: " + ", ".join(unavailable))
+        subjects = [
+            str(item["id"])
+            for item in (dataset.get("metadata") or {}).get("subjects", [])
+            if isinstance(item, dict) and item.get("id")
+        ]
+        if not subjects:
+            raise ValueError("The dataset has no registered subjects")
+        spec = _guided_flow_spec(
+            project_name.strip(), research_question.strip(), subjects, selected
+        )
+        project = self.store.create_project(
+            subject, dataset_id, GUIDED_PIPELINE[0], GUIDED_PIPELINE[1], spec
+        )
+        pipeline = self.catalog.resolve(*GUIDED_PIPELINE)
+        unresolved = [
+            item
+            for item in self._parameter_resolution_status(subject, project, dataset, pipeline)
+            if not item["resolved"]
+        ]
+        first = unresolved[0] if unresolved else None
+        return _response(
+            "start_available_flow",
+            {
+                "status": "needs_parameter_decisions" if unresolved else "ready_to_run",
+                "flow_id": flow_id,
+                "project": project,
+                "unresolved_parameter_count": len(unresolved),
+                "unresolved_parameter_paths": [item["parameter_path"] for item in unresolved],
+                "next_action": (
+                    {
+                        "tool": "get_project_parameter_guidance",
+                        "arguments": {
+                            "project_id": project["id"],
+                            "parameter_path": first["parameter_path"],
+                        },
+                        "requires_investigator_choice": True,
+                    }
+                    if first
+                    else {"tool": "run_available_flow", "arguments": {"project_id": project["id"]}}
+                ),
+            },
+        )
+
+    def run_available_flow(self, subject: str, project_id: str) -> dict[str, Any]:
+        project = self._project(project_id, subject)
+        if (project["pipeline_id"], project["pipeline_version"]) != GUIDED_PIPELINE:
+            raise ValueError("Project is not associated with a guided product flow")
+        dataset = self._dataset(project["dataset_id"])
+        pipeline = self.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
+        unresolved = [
+            item
+            for item in self._parameter_resolution_status(subject, project, dataset, pipeline)
+            if not item["resolved"]
+        ]
+        if unresolved:
+            first = unresolved[0]
+            return _response(
+                "run_available_flow",
+                {
+                    "status": "needs_parameter_decisions",
+                    "project_id": project_id,
+                    "unresolved_parameter_count": len(unresolved),
+                    "unresolved_parameter_paths": [item["parameter_path"] for item in unresolved],
+                    "next_action": {
+                        "tool": "get_project_parameter_guidance",
+                        "arguments": {
+                            "project_id": project_id,
+                            "parameter_path": first["parameter_path"],
+                        },
+                        "requires_investigator_choice": True,
+                    },
+                },
+                warnings=["The flow was not queued because methodological decisions are incomplete."],
+            )
+        existing = self.store.get_reusable_job_for_project(project_id, subject)
+        if existing:
+            return _response(
+                "run_available_flow",
+                {
+                    "status": existing["state"],
+                    "flow_id": GUIDED_FLOW_ID,
+                    "project_id": project_id,
+                    "job": existing,
+                    "reused_existing_job": True,
+                    "next_action": {
+                        "tool": "get_job_status", "arguments": {"job_id": existing["id"]}
+                    },
+                },
+            )
+        validation = self.validate_project(subject, project_id)
+        if not validation["ok"]:
+            return _response(
+                "run_available_flow",
+                {"status": "blocked", "project_id": project_id, "next_action": "correct_project"},
+                ok=False,
+                errors=validation["errors"],
+                warnings=validation["warnings"],
+            )
+        job = self.store.create_job(project)
+        return _response(
+            "run_available_flow",
+            {
+                "status": "queued",
+                "flow_id": GUIDED_FLOW_ID,
+                "project_id": project_id,
+                "job": job,
+                "reused_existing_job": False,
+                "next_action": {"tool": "get_job_status", "arguments": {"job_id": job["id"]}},
+            },
+        )
 
     def create_review_link(
         self, subject: str, job_id: str, public_base_url: str
@@ -1303,6 +1556,8 @@ def build_control_plane_server(
     server = MCPServer(
         "CONN Pilot",
         instructions=(
+            "When a researcher asks what the product can do or wants to run an available analysis, call "
+            "get_product_capabilities first, then use start_available_flow and run_available_flow. "
             "Use dataset_id, project_id and job_id; never invent server paths. Submit long CONN analyses "
             "as jobs and poll get_job_status. Scientific QC decisions always require investigator review. "
             "For methodological questions, retrieve literature evidence, distinguish explicit from inferred "
@@ -1321,6 +1576,44 @@ def build_control_plane_server(
         if not require_mcp_auth:
             return settings.admin_subject
         raise ValueError("Authenticated subject is unavailable")
+
+    @server.tool(annotations=read_only)
+    def get_product_capabilities() -> dict[str, Any]:
+        """Show what CONN Pilot can do and which guided flows are executable on available datasets."""
+        return service.get_product_capabilities(storage.available)
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=False,
+        )
+    )
+    def start_available_flow(
+        flow_id: str,
+        dataset_id: str,
+        project_name: str,
+        research_question: str,
+        seed_ids: list[str],
+    ) -> dict[str, Any]:
+        """Create an owned guided-flow draft from published options; scientific parameters remain for review."""
+        return service.start_available_flow(
+            subject(), flow_id, dataset_id, project_name, research_question, seed_ids,
+            storage.available,
+        )
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=True,
+            open_world_hint=False,
+        )
+    )
+    def run_available_flow(project_id: str) -> dict[str, Any]:
+        """Queue a guided flow, or return the exact unresolved investigator decision that blocks it."""
+        return service.run_available_flow(subject(), project_id)
 
     @server.tool(annotations=read_only)
     def list_pipelines() -> dict[str, Any]:
@@ -1926,6 +2219,91 @@ def _response(
 
 def _safe_package_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", Path(value).name).strip("._") or "artifact"
+
+
+def _guided_flow_spec(
+    project_name: str,
+    research_question: str,
+    subject_ids: list[str],
+    seed_ids: list[str],
+) -> dict[str, Any]:
+    def fixed(value: Any, rationale: str, *, confirmed: bool = True) -> dict[str, Any]:
+        return {
+            "value": value,
+            "source": "validated_guided_flow_scope",
+            "rationale": rationale,
+            "confirmed_by_investigator": confirmed,
+        }
+
+    def unresolved(rationale: str) -> dict[str, Any]:
+        return {
+            "value": None,
+            "source": "awaiting_literature_guided_investigator_choice",
+            "rationale": rationale,
+            "confirmed_by_investigator": False,
+        }
+
+    return {
+        "project": {"name": project_name, "research_question": research_question},
+        "design": {
+            "type": "one_sample",
+            "groups": {"sample": subject_ids},
+            "covariates": {},
+            "contrasts": [
+                {
+                    "name": "sample_mean",
+                    "effects": ["AllSubjects"],
+                    "weights": [1],
+                    "rationale": "Estimate the one-sample mean selected through the guided flow.",
+                    "confirmed_by_investigator": True,
+                }
+            ],
+        },
+        "seeds": [
+            {
+                "name": seed_id,
+                "conn_source": GUIDED_SEEDS[seed_id],
+                "rationale": "Seed selected by the investigator from the published flow capabilities.",
+                "confirmed_by_investigator": True,
+            }
+            for seed_id in seed_ids
+        ],
+        "parameters": {
+            "preprocessing": {
+                "pipeline": fixed(
+                    "default_mni", "Only preprocessing pipeline implemented by this guided flow."
+                ),
+                "smoothing_fwhm_mm": unresolved(
+                    "Select a smoothing scale after reviewing the available evidence."
+                ),
+                "outlier_fd_threshold_mm": unresolved(
+                    "Select the ART motion threshold after reviewing the available evidence."
+                ),
+                "global_signal_z_threshold": unresolved(
+                    "Select the ART global-signal threshold after reviewing the available evidence."
+                ),
+            },
+            "denoising": {
+                "method": fixed(
+                    "aCompCor", "Only denoising method implemented by this guided flow."
+                ),
+                "wm_components": unresolved(
+                    "Select the white-matter component count after reviewing the available evidence."
+                ),
+                "csf_components": unresolved(
+                    "Select the CSF component count after reviewing the available evidence."
+                ),
+                "bandpass_filter_hz": unresolved(
+                    "Select the temporal filter after reviewing the available evidence."
+                ),
+                "detrending_order": fixed(1, "Linear detrending in the validated guided flow."),
+                "despiking": fixed(0, "Despiking disabled in the validated guided flow."),
+                "global_signal_regression": unresolved(
+                    "Confirm the supported no-GSR choice after reviewing the available evidence."
+                ),
+            },
+        },
+    }
 
 
 def _now() -> str:

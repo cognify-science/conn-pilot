@@ -608,6 +608,29 @@ class PostgresControlStore:
             row = connection.execute(query, parameters).fetchone()
         return dict(row) if row else None
 
+    def get_reusable_job_for_project(
+        self, project_id: str, subject: str
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT j.id, j.owner_subject, j.project_id, j.dataset_id, j.state, j.phase,
+                       j.worker_id, j.lease_expires_at::text AS lease_expires_at,
+                       j.attempts, j.result_version, j.result_summary, j.error,
+                       j.started_at::text AS started_at, j.finished_at::text AS finished_at,
+                       j.created_at::text AS created_at, j.updated_at::text AS updated_at
+                FROM cp_jobs j
+                JOIN cp_projects p ON p.id=j.project_id
+                WHERE j.project_id=%s AND j.owner_subject=%s
+                  AND j.state IN ('queued', 'running', 'succeeded')
+                  AND j.created_at >= p.updated_at
+                ORDER BY j.created_at DESC, j.id DESC
+                LIMIT 1
+                """,
+                (project_id, subject),
+            ).fetchone()
+        return dict(row) if row else None
+
     def retry_job(self, job_id: str, subject: str) -> dict[str, Any]:
         with self._connect() as connection:
             with connection.transaction():

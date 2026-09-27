@@ -114,6 +114,23 @@ Codex -> MCP/API Railway -> PostgreSQL
 
 El contrato está en `contracts/distributed.v1.json`. Los ejemplos de configuración son `config/control-plane.example.env`, `config/worker.example.env` y `config/datasets.example.yaml`.
 
+### Entrada guiada del producto
+
+El investigador no necesita conocer el catálogo interno ni construir YAML. El
+MCP expone tres operaciones de alto nivel:
+
+- `get_product_capabilities`: describe capacidades, datasets, semillas y flujos
+  que están ejecutables en ese momento.
+- `start_available_flow`: crea un proyecto propio usando únicamente un flujo,
+  dataset y semillas publicados.
+- `run_available_flow`: encola el análisis si está completo o devuelve la
+  próxima decisión metodológica que debe tomar el investigador.
+
+La ejecución guiada no elige parámetros científicos automáticamente. Cada
+parámetro requerido se resuelve con evidencia y confirmación del investigador.
+Repetir `run_available_flow` reutiliza el job vigente del mismo proyecto. La
+guía de uso está en `docs/researcher-quickstart.md`.
+
 ### Revisión de calidad y aceptación científica
 
 El MCP remoto expone operaciones para revisar y cerrar una versión de resultado:
