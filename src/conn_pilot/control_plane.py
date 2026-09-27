@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -39,14 +40,16 @@ from .parameter_resolver import ParameterResolver
 from .project import validate_project as validate_project_definition
 from .reporting import build_reproducibility_package
 from .portal import review_portal_html
+from .seed_catalog import SeedCatalog
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTROL_RESPONSE_SCHEMA = "conn_pilot_control_response_v1"
 REMOTE_SPEC_FIELDS = {"project", "design", "seeds", "parameters"}
-GUIDED_FLOW_ID = "rsfmri_seed_to_voxel_one_sample_v1"
+GUIDED_FLOW_ID = "rsfmri_seed_to_voxel_v1"
+LEGACY_GUIDED_FLOW_IDS = {"rsfmri_seed_to_voxel_one_sample_v1"}
 GUIDED_PIPELINE = ("rsfmri_seed_to_voxel", "1.0.0")
-GUIDED_SEEDS = {
+LEGACY_GUIDED_SEEDS = {
     "left_amygdala": "atlas.Amygdala l",
     "right_amygdala": "atlas.Amygdala r",
 }
@@ -330,6 +333,7 @@ class ControlPlaneService:
     ) -> None:
         self.store = store
         self.catalog = Catalog(catalog_root)
+        self.seed_catalog = SeedCatalog(Path(catalog_root) / "seeds" / "conn25b.json")
         self.literature = LiteratureEvidenceService(
             literature_root or Path.cwd() / "knowledge" / "pipeline_review"
         )
@@ -355,6 +359,21 @@ class ControlPlaneService:
     def list_datasets(self) -> dict[str, Any]:
         datasets = self.store.list_datasets()
         return _response("list_datasets", {"datasets": datasets, "count": len(datasets)})
+
+    def list_available_seeds(
+        self,
+        query: str | None = None,
+        collection: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Search the versioned inventory of seed regions shipped with CONN."""
+        return _response(
+            "list_available_seeds",
+            self.seed_catalog.search(
+                query=query, collection=collection, limit=limit, offset=offset
+            ),
+        )
 
     def get_system_health(self, storage_available: bool) -> dict[str, Any]:
         health = self.store.get_system_health()
@@ -402,15 +421,18 @@ class ControlPlaneService:
         ]
         flow = {
             "id": GUIDED_FLOW_ID,
-            "label": "Resting-state amygdala seed-to-voxel, one sample",
+            "label": "Resting-state seed-to-voxel",
             "description": pipeline.definition.get("description", ""),
             "pipeline": {"id": pipeline.id, "version": pipeline.version},
-            "design": "one_sample",
+            "design_options": pipeline.definition["project_contract"].get("design_types", []),
             "input": {"layout": "bids", "state": "raw", "sessions_per_subject": 1},
-            "seed_options": [
-                {"id": seed_id, "conn_source": source}
-                for seed_id, source in GUIDED_SEEDS.items()
-            ],
+            "seed_catalog": {
+                "catalog_version": self.seed_catalog.metadata.get("catalog_version"),
+                "conn_version": self.seed_catalog.metadata.get("conn_version"),
+                "seed_count": self.seed_catalog.metadata.get("seed_count"),
+                "collections": self.seed_catalog.metadata.get("collections"),
+                "search_tool": "list_available_seeds",
+            },
             "stages": [stage["id"] for stage in pipeline.stages],
             "investigator_parameter_decisions": guided_parameters,
             "outputs": [
@@ -434,6 +456,8 @@ class ControlPlaneService:
                 "capabilities": [
                     "literature_guided_parameter_selection",
                     "validated_conn_execution",
+                    "one_sample_or_two_independent_group_designs",
+                    "continuous_covariates_and_investigator_defined_contrasts",
                     "subject_level_quality_review",
                     "versioned_sample_recalculation",
                     "scientific_acceptance",
@@ -444,6 +468,7 @@ class ControlPlaneService:
                 "ready_for_execution": any(item["available"] for item in availability),
                 "workflow": [
                     "get_product_capabilities",
+                    "list_available_seeds",
                     "start_available_flow",
                     "resolve_project_parameter",
                     "run_available_flow",
@@ -466,19 +491,21 @@ class ControlPlaneService:
         research_question: str,
         seed_ids: list[str],
         storage_available: bool,
+        design_type: str = "one_sample",
+        groups: dict[str, list[str]] | None = None,
+        covariates: dict[str, dict[str, float]] | None = None,
+        contrasts: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        if flow_id != GUIDED_FLOW_ID:
+        if flow_id != GUIDED_FLOW_ID and flow_id not in LEGACY_GUIDED_FLOW_IDS:
             raise ValueError(f"Unknown guided flow: {flow_id}")
         if not isinstance(project_name, str) or not project_name.strip():
             raise ValueError("project_name is required")
         if not isinstance(research_question, str) or not research_question.strip():
             raise ValueError("research_question is required")
         if not isinstance(seed_ids, list) or not seed_ids:
-            raise ValueError("Select at least one seed_id from the published seed options")
-        selected = list(dict.fromkeys(str(value) for value in seed_ids))
-        unknown = sorted(set(selected) - set(GUIDED_SEEDS))
-        if unknown:
-            raise ValueError(f"Unknown seed_ids: {', '.join(unknown)}")
+            raise ValueError("Select at least one seed_id from the published seed catalog")
+        selected = [LEGACY_GUIDED_SEEDS.get(str(value), str(value)) for value in seed_ids]
+        selected_seeds = self.seed_catalog.resolve(selected)
         dataset = self._dataset(dataset_id)
         health = self.store.get_system_health()
         worker = next(
@@ -504,8 +531,15 @@ class ControlPlaneService:
         ]
         if not subjects:
             raise ValueError("The dataset has no registered subjects")
+        design = _guided_design(
+            subject_ids=subjects,
+            design_type=design_type,
+            groups=groups,
+            covariates=covariates,
+            contrasts=contrasts,
+        )
         spec = _guided_flow_spec(
-            project_name.strip(), research_question.strip(), subjects, selected
+            project_name.strip(), research_question.strip(), design, selected_seeds
         )
         project = self.store.create_project(
             subject, dataset_id, GUIDED_PIPELINE[0], GUIDED_PIPELINE[1], spec
@@ -928,8 +962,18 @@ class ControlPlaneService:
         if len(included) < 2:
             raise ValueError("At least two accepted subjects are required for this group analysis")
         project = self._project(job["project_id"], subject)
-        if (project.get("spec") or {}).get("design", {}).get("type") != "one_sample":
-            raise ValueError("Versioned recalculation currently supports one_sample designs")
+        design = (project.get("spec") or {}).get("design", {})
+        if design.get("type") == "two_independent_groups":
+            accepted = set(map(str, included))
+            empty_groups = [
+                str(name) for name, members in design.get("groups", {}).items()
+                if not accepted.intersection(map(str, members))
+            ]
+            if empty_groups:
+                raise ValueError(
+                    "Accepted sample must retain subjects in every group; empty: "
+                    + ", ".join(empty_groups)
+                )
         run = self.store.create_second_level_run(
             job_id, subject, result_version, sample_version, included, review
         )
@@ -1582,6 +1626,16 @@ def build_control_plane_server(
         """Show what CONN Pilot can do and which guided flows are executable on available datasets."""
         return service.get_product_capabilities(storage.available)
 
+    @server.tool(annotations=read_only)
+    def list_available_seeds(
+        query: str | None = None,
+        collection: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Search built-in CONN atlas, network, and Schaefer seed regions by name."""
+        return service.list_available_seeds(query, collection, limit, offset)
+
     @server.tool(
         annotations=ToolAnnotations(
             read_only_hint=False,
@@ -1596,11 +1650,15 @@ def build_control_plane_server(
         project_name: str,
         research_question: str,
         seed_ids: list[str],
+        design_type: str = "one_sample",
+        groups: dict[str, list[str]] | None = None,
+        covariates: dict[str, dict[str, float]] | None = None,
+        contrasts: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Create an owned guided-flow draft from published options; scientific parameters remain for review."""
+        """Create a guided draft with chosen seeds, groups, covariates, and confirmed contrasts."""
         return service.start_available_flow(
             subject(), flow_id, dataset_id, project_name, research_question, seed_ids,
-            storage.available,
+            storage.available, design_type, groups, covariates, contrasts,
         )
 
     @server.tool(
@@ -2224,8 +2282,8 @@ def _safe_package_name(value: str) -> str:
 def _guided_flow_spec(
     project_name: str,
     research_question: str,
-    subject_ids: list[str],
-    seed_ids: list[str],
+    design: dict[str, Any],
+    seeds: list[dict[str, Any]],
 ) -> dict[str, Any]:
     def fixed(value: Any, rationale: str, *, confirmed: bool = True) -> dict[str, Any]:
         return {
@@ -2245,28 +2303,15 @@ def _guided_flow_spec(
 
     return {
         "project": {"name": project_name, "research_question": research_question},
-        "design": {
-            "type": "one_sample",
-            "groups": {"sample": subject_ids},
-            "covariates": {},
-            "contrasts": [
-                {
-                    "name": "sample_mean",
-                    "effects": ["AllSubjects"],
-                    "weights": [1],
-                    "rationale": "Estimate the one-sample mean selected through the guided flow.",
-                    "confirmed_by_investigator": True,
-                }
-            ],
-        },
+        "design": design,
         "seeds": [
             {
-                "name": seed_id,
-                "conn_source": GUIDED_SEEDS[seed_id],
+                "name": seed["id"],
+                "conn_source": seed["conn_source"],
                 "rationale": "Seed selected by the investigator from the published flow capabilities.",
                 "confirmed_by_investigator": True,
             }
-            for seed_id in seed_ids
+            for seed in seeds
         ],
         "parameters": {
             "preprocessing": {
@@ -2303,6 +2348,112 @@ def _guided_flow_spec(
                 ),
             },
         },
+    }
+
+
+def _guided_design(
+    *,
+    subject_ids: list[str],
+    design_type: str,
+    groups: dict[str, list[str]] | None,
+    covariates: dict[str, dict[str, float]] | None,
+    contrasts: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    if design_type not in {"one_sample", "two_independent_groups"}:
+        raise ValueError("design_type must be one_sample or two_independent_groups")
+    normalized_groups = groups or ({"sample": list(subject_ids)} if design_type == "one_sample" else {})
+    expected_group_count = 1 if design_type == "one_sample" else 2
+    if not isinstance(normalized_groups, dict) or len(normalized_groups) != expected_group_count:
+        raise ValueError(f"{design_type} requires exactly {expected_group_count} group(s)")
+    subject_set = set(subject_ids)
+    assigned: list[str] = []
+    for name, members in normalized_groups.items():
+        if not isinstance(name, str) or not name.strip() or not isinstance(members, list) or not members:
+            raise ValueError("Each group must have a non-empty name and at least one subject")
+        assigned.extend(map(str, members))
+    if len(assigned) != len(set(assigned)):
+        raise ValueError("A subject cannot belong to more than one group")
+    if set(assigned) != subject_set:
+        missing = sorted(subject_set - set(assigned))
+        unknown = sorted(set(assigned) - subject_set)
+        details = []
+        if missing:
+            details.append("missing: " + ", ".join(missing))
+        if unknown:
+            details.append("unknown: " + ", ".join(unknown))
+        raise ValueError("Groups must assign every dataset subject exactly once (" + "; ".join(details) + ")")
+
+    normalized_covariates = covariates or {}
+    if not isinstance(normalized_covariates, dict):
+        raise ValueError("covariates must map names to subject-value mappings")
+    for name, values in normalized_covariates.items():
+        if not isinstance(name, str) or not name.strip() or not isinstance(values, dict):
+            raise ValueError("Each covariate must have a name and a subject-value mapping")
+        if set(map(str, values)) != subject_set:
+            raise ValueError(f"Covariate {name} must define every dataset subject exactly once")
+        if not all(
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            for value in values.values()
+        ):
+            raise ValueError(f"Covariate {name} must contain only finite numbers")
+
+    if contrasts is None:
+        if design_type != "one_sample" or normalized_covariates:
+            raise ValueError(
+                "contrasts are required when using groups or covariates; the system will not infer the scientific hypothesis"
+            )
+        normalized_contrasts = [
+            {
+                "name": "sample_mean",
+                "effects": ["AllSubjects"],
+                "weights": [1],
+                "rationale": "Estimate the one-sample mean selected through the guided flow.",
+                "confirmed_by_investigator": True,
+            }
+        ]
+    elif not isinstance(contrasts, list) or not contrasts:
+        raise ValueError("contrasts must contain at least one investigator-defined contrast")
+    else:
+        effects = {"AllSubjects", *normalized_groups, *normalized_covariates}
+        normalized_contrasts = []
+        for index, contrast in enumerate(contrasts):
+            if not isinstance(contrast, dict):
+                raise ValueError(f"contrasts[{index}] must be a mapping")
+            names = contrast.get("effects")
+            weights = contrast.get("weights")
+            if not contrast.get("name") or not contrast.get("rationale"):
+                raise ValueError(f"contrasts[{index}] requires name and rationale")
+            if not isinstance(names, list) or not names or not isinstance(weights, list) or len(names) != len(weights):
+                raise ValueError(f"contrasts[{index}] effects and weights must be non-empty and have equal length")
+            unknown = sorted(set(map(str, names)) - effects)
+            if unknown:
+                raise ValueError(f"contrasts[{index}] references unknown effects: {', '.join(unknown)}")
+            if not all(
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(float(value))
+                for value in weights
+            ) or all(float(value) == 0 for value in weights):
+                raise ValueError(f"contrasts[{index}] weights must be finite and not all zero")
+            normalized_contrasts.append(
+                {
+                    "name": str(contrast["name"]),
+                    "effects": list(map(str, names)),
+                    "weights": list(weights),
+                    "rationale": str(contrast["rationale"]),
+                    "confirmed_by_investigator": True,
+                }
+            )
+    return {
+        "type": design_type,
+        "groups": {str(name): list(map(str, members)) for name, members in normalized_groups.items()},
+        "covariates": {
+            str(name): {str(subject): float(value) for subject, value in values.items()}
+            for name, values in normalized_covariates.items()
+        },
+        "contrasts": normalized_contrasts,
     }
 
 

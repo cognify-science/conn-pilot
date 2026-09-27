@@ -552,6 +552,7 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
             tools,
             {
                 "get_product_capabilities",
+                "list_available_seeds",
                 "start_available_flow",
                 "run_available_flow",
                 "list_pipelines",
@@ -600,13 +601,13 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
         capabilities = service.get_product_capabilities(storage_available=True)
         self.assertTrue(capabilities["data"]["ready_for_execution"])
         flow = capabilities["data"]["guided_flows"][0]
-        self.assertEqual(flow["id"], "rsfmri_seed_to_voxel_one_sample_v1")
+        self.assertEqual(flow["id"], "rsfmri_seed_to_voxel_v1")
         self.assertEqual(flow["availability"][0]["dataset_id"], "study_001")
         self.assertTrue(flow["availability"][0]["available"])
-        self.assertEqual(
-            {item["id"] for item in flow["seed_options"]},
-            {"left_amygdala", "right_amygdala"},
-        )
+        self.assertEqual(flow["design_options"], ["one_sample", "two_independent_groups"])
+        self.assertEqual(flow["seed_catalog"]["seed_count"], 564)
+        seeds = service.list_available_seeds(query="amygdala", collection="atlas")
+        self.assertEqual(seeds["data"]["total_count"], 2)
 
         started = service.start_available_flow(
             "researcher-1",
@@ -614,7 +615,7 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
             "study_001",
             "guided-pilot",
             "Estimate mean amygdala connectivity.",
-            ["left_amygdala"],
+            ["atlas.Amygdala l"],
             True,
         )
         self.assertEqual(started["data"]["status"], "needs_parameter_decisions")
@@ -639,6 +640,35 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                 "owner", "rsfmri_seed_to_voxel_one_sample_v1", "study_001",
                 "guided-pilot", "Question", ["hippocampus"], True,
             )
+
+    def test_guided_flow_accepts_groups_covariates_and_confirmed_contrasts(self) -> None:
+        store = FakeStore()
+        store.datasets["study_001"]["metadata"]["subjects"] = [
+            {"id": "sub-001"}, {"id": "sub-002"}, {"id": "sub-003"}, {"id": "sub-004"}
+        ]
+        store.datasets["study_001"]["metadata"]["subject_count"] = 4
+        service = ControlPlaneService(store, ROOT / "catalog")
+        started = service.start_available_flow(
+            "owner", "rsfmri_seed_to_voxel_v1", "study_001", "groups", "Compare cohorts",
+            ["networks.DefaultMode.MPFC (1,55,-3)"], True,
+            design_type="two_independent_groups",
+            groups={"control": ["sub-001", "sub-002"], "patient": ["sub-003", "sub-004"]},
+            covariates={"age": {"sub-001": 21, "sub-002": 22, "sub-003": 23, "sub-004": 24}},
+            contrasts=[{
+                "name": "patient_gt_control_adjusted_age",
+                "effects": ["control", "patient", "age"],
+                "weights": [-1, 1, 0],
+                "rationale": "Test the investigator-specified group difference controlling for age.",
+            }],
+        )
+        design = started["data"]["project"]["spec"]["design"]
+        self.assertEqual(design["type"], "two_independent_groups")
+        self.assertEqual(design["covariates"]["age"]["sub-004"], 24.0)
+        self.assertTrue(design["contrasts"][0]["confirmed_by_investigator"])
+        self.assertEqual(
+            started["data"]["project"]["spec"]["seeds"][0]["conn_source"],
+            "networks.DefaultMode.MPFC (1,55,-3)",
+        )
 
     def test_run_available_flow_queues_a_fully_documented_project(self) -> None:
         store = FakeStore()

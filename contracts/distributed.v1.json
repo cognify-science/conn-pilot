@@ -35,6 +35,16 @@
     "remote_submission_gate": "Every required executable parameter must reference an investigator-confirmed method decision",
     "resolver_contract": "parameter_resolver.v1.json"
   },
+  "guided_seed_to_voxel": {
+    "design_types": ["one_sample", "two_independent_groups"],
+    "continuous_covariates": true,
+    "investigator_defined_contrasts": true,
+    "seed_catalog": {
+      "version": "conn-25.b-builtins-v1",
+      "collections": {"atlas": 132, "networks": 32, "schaefer": 400},
+      "search_operation": "list_available_seeds"
+    }
+  },
   "quality_review": {
     "contract": "qc_review.v1.json",
     "subject_decisions": ["accept", "exclude", "needs_review"],

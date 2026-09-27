@@ -117,12 +117,15 @@ El contrato está en `contracts/distributed.v1.json`. Los ejemplos de configurac
 ### Entrada guiada del producto
 
 El investigador no necesita conocer el catálogo interno ni construir YAML. El
-MCP expone tres operaciones de alto nivel:
+MCP expone cuatro operaciones de alto nivel:
 
 - `get_product_capabilities`: describe capacidades, datasets, semillas y flujos
   que están ejecutables en ese momento.
+- `list_available_seeds`: busca y pagina las 564 regiones versionadas de atlas,
+  redes y Schaefer incluidas con CONN 25.b.
 - `start_available_flow`: crea un proyecto propio usando únicamente un flujo,
-  dataset y semillas publicados.
+  dataset y semillas publicados; admite una muestra o dos grupos independientes,
+  covariables continuas y contrastes confirmados por el investigador.
 - `run_available_flow`: encola el análisis si está completo o devuelve la
   próxima decisión metodológica que debe tomar el investigador.
 

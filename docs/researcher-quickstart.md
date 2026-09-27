@@ -14,7 +14,9 @@ ejecutables, sus diseños, semillas, etapas, salidas y limitaciones.
 
 ## 2. Crear el análisis
 
-Seleccione un flujo, un dataset y una o más semillas publicadas. Por ejemplo:
+Busque una o más regiones en el catálogo de semillas y seleccione el diseño.
+Puede usar una muestra o dos grupos independientes, con covariables continuas
+opcionales y contrastes definidos explícitamente. Por ejemplo:
 
 > Quiero crear un análisis resting-state seed-to-voxel de una muestra sobre el
 > sandbox, usando las semillas de amígdala izquierda y derecha. Mi pregunta es…
@@ -55,7 +57,12 @@ realizarse desde Codex.
 
 ## Alcance actual
 
-El flujo guiado disponible es resting-state seed-to-voxel de una muestra sobre
-datasets BIDS registrados. El sandbox ofrece semillas de amígdala izquierda y
-derecha. La incorporación de datasets propios y la composición libre de nuevos
-pipelines permanecen fuera del alcance de este piloto.
+El flujo guiado disponible es resting-state seed-to-voxel sobre datasets BIDS
+registrados. Expone las 564 regiones incorporadas en CONN 25.b: 132 del atlas
+CONN, 32 regiones de redes y 400 parcelaciones Schaefer. Admite una muestra o
+dos grupos independientes, covariables numéricas y múltiples contrastes. El
+investigador debe asignar cada sujeto a un grupo, proporcionar un valor por
+sujeto para cada covariable y confirmar la hipótesis de cada contraste; el
+sistema valida esos datos y no inventa decisiones científicas. La incorporación
+de datasets propios y la composición libre de nuevos pipelines permanecen fuera
+del alcance de este piloto.

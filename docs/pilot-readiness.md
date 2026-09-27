@@ -10,7 +10,7 @@ Esta hoja registra los ocho frentes acordados y sus condiciones verificables.
 | 4. Incorporación de datasets | aplazado por decisión de producto | El piloto usa solamente el dataset sandbox registrado |
 | 5. Informe científico | implementado | ZIP con PDF, HTML, JSON, métodos, parámetros, literatura, decisiones, láminas QC, mapas vigentes, BIDS `dataset_description` y hashes |
 | 6. Robustez operativa | implementado para el piloto | Supervisor con exclusión mutua, reinicio, autostart, log local, leases y `get_system_health` |
-| 7. Validación interna | completada para el alcance sandbox | Matriz trazable, 65 pruebas automáticas, prueba MATLAB real del subconjunto y ejecución remota completa |
+| 7. Validación interna | completada para el alcance sandbox | Matriz trazable, 67 pruebas automáticas, catálogo cotejado con 564 fuentes MATLAB, prueba MATLAB real del subconjunto y ejecución remota completa |
 | 8. Piloto externo | preparado; pendiente de participantes | Protocolo, tareas, métricas y criterios de aceptación para 3–5 investigadores |
 
 ## Criterio de salida
