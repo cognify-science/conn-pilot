@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .analysis_contract import analysis_contract
 from .project import execution_identifier, safe_identifier
 
 
@@ -22,6 +23,7 @@ def _render_batch(project: dict[str, Any], project_path: Path, run_dir: Path) ->
     subjects = project["subjects"]
     design = project["design"]
     seeds = project["seeds"]
+    analysis = analysis_contract(project)
     project_name = execution_identifier(project["project"]["name"])
     lines = [
         "% Generated deterministically by CONN Pilot.",
@@ -78,8 +80,8 @@ def _render_batch(project: dict[str, Any], project_path: Path, run_dir: Path) ->
             "batch.Denoising.done = 1;",
             "batch.Denoising.overwrite = 0;",
             "",
-            "batch.Analysis.name = 'SBC_01';",
-            "batch.Analysis.type = 2;",
+            f"batch.Analysis.name = '{_matlab_string(analysis['conn_name'])}';",
+            f"batch.Analysis.type = {_number(analysis['conn_type'])};",
             "batch.Analysis.measure = 1;",
             f"batch.Analysis.sources = {_cell([seed['conn_source'] for seed in seeds])};",
             "batch.Analysis.done = 1;",
@@ -91,7 +93,7 @@ def _render_batch(project: dict[str, Any], project_path: Path, run_dir: Path) ->
     )
     lines.extend(_render_extended_qc(run_dir))
     lines.extend(_render_qc_metrics(subjects, preprocessing, run_dir))
-    lines.extend(_render_results(design["contrasts"], seeds))
+    lines.extend(_render_results(design["contrasts"], seeds, analysis["conn_name"]))
     lines.append("")
     return "\n".join(lines)
 
@@ -218,7 +220,9 @@ def _render_qc_metrics(
     return lines
 
 
-def _render_results(contrasts: list[dict[str, Any]], seeds: list[dict[str, Any]]) -> list[str]:
+def _render_results(
+    contrasts: list[dict[str, Any]], seeds: list[dict[str, Any]], analysis_name: str
+) -> list[str]:
     lines = ["% Second-level models"]
     sources = [seed["conn_source"] for seed in seeds]
     for index, contrast in enumerate(contrasts, start=1):
@@ -228,7 +232,7 @@ def _render_results(contrasts: list[dict[str, Any]], seeds: list[dict[str, Any]]
                 f"% Contrast: {_comment(contrast['name'])}",
                 f"clear {variable};",
                 f"{variable}.filename = batch.filename;",
-                f"{variable}.Results.name = 'SBC_01';",
+                f"{variable}.Results.name = '{_matlab_string(analysis_name)}';",
                 f"{variable}.Results.saveas = '{_matlab_string(safe_identifier(contrast['name']))}';",
                 f"{variable}.Results.between_subjects.effect_names = {_cell(contrast['effects'])};",
                 f"{variable}.Results.between_subjects.contrast = [{_vector(contrast['weights'])}];",

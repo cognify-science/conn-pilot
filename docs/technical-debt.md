@@ -5,7 +5,7 @@ considera resuelta hasta cumplir sus criterios de aceptación.
 
 ## TD-001 — Contrato modular de flujos científicos
 
-**Estado:** pendiente  
+**Estado:** resuelta en su primera versión operativa (2026-09-27)
 **Momento de resolución:** antes de incorporar el segundo pipeline ejecutable  
 **Motivo:** `conn_pilot_project_v1` y el pipeline
 `rsfmri_seed_to_voxel@1.0.0` describen un flujo completo y fijo. Agregar una
@@ -32,6 +32,20 @@ denoising, QC y reglas de compatibilidad.
 3. El plan resuelto conserva versiones, decisiones y confirmaciones.
 4. Un proyecto `v1` existente puede reproducirse sin cambios.
 5. Cada combinación ejecutable tiene evidencia de validación identificable.
+
+### Resolución
+
+`conn_pilot_project_v2` incorpora una composición congelada y firmada por el
+catálogo. Seed-to-voxel y ROI-to-ROI comparten los módulos de inspección,
+preprocesamiento, denoising y QC. El planificador calcula una identidad por nodo
+y anticipa qué nodos siguen siendo reutilizables ante un cambio. La ejecución
+real reutiliza el trabajo completo cuando el proyecto no cambió y reutiliza el
+primer nivel en los recálculos de muestra; la reutilización física de derivados
+intermedios entre proyectos distintos queda como optimización posterior.
+
+Las composiciones libres continúan bloqueadas. Solo se aceptan plantillas cuya
+combinación y versiones coinciden con el catálogo validado. Los proyectos v1 se
+leen y ejecutan sin agregar una composición implícita.
 
 ## TD-002 — Orientación metodológica basada en evidencia
 

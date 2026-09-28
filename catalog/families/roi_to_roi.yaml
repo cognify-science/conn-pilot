@@ -1,0 +1,6 @@
+id: roi_to_roi
+name: ROI-to-ROI connectivity
+description: Connectivity matrices estimated among two or more confirmed ROI regions.
+scope:
+  modality: resting_state_fmri
+  software: CONN

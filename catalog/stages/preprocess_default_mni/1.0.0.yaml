@@ -1,6 +1,8 @@
 id: preprocess_default_mni
 version: 1.0.0
 kind: conn_batch
+category: preprocessing
+status: validated
 requires: [dataset_inventory]
 provides: [preprocessed_data]
-
+project_inputs: [parameters.preprocessing]

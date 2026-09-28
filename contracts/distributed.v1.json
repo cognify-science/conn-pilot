@@ -45,6 +45,20 @@
       "search_operation": "list_available_seeds"
     }
   },
+  "modular_pipeline_builder": {
+    "composition_policy": "validated_templates_only",
+    "project_schema": "conn_pilot_project_v2",
+    "composition_contract": "pipeline_composition.v1.json",
+    "templates": ["rsfmri_seed_to_voxel@1.0.0", "rsfmri_roi_to_roi@1.0.0"],
+    "change_preview": "Reports reusable and invalidated nodes before persisting or executing a change",
+    "free_matlab_allowed": false,
+    "mcp_operations": [
+      "get_pipeline_builder_capabilities",
+      "compose_pipeline",
+      "get_project_pipeline_graph",
+      "preview_pipeline_change"
+    ]
+  },
   "quality_review": {
     "contract": "qc_review.v1.json",
     "subject_decisions": ["accept", "exclude", "needs_review"],

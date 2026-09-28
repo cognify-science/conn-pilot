@@ -3,6 +3,13 @@ version: 1.0.0
 family: seed_to_voxel
 status: validated_reference_run
 description: Resting-state seed-to-voxel analysis for one sample or two independent groups.
+execution:
+  analysis:
+    kind: seed_to_voxel
+    conn_name: SBC_01
+    conn_type: 2
+    first_level_artifact: voxel_maps
+    second_level_artifact: spm_models
 validation:
   date: 2026-09-15
   scope: Technical end-to-end reference run with three subjects and two built-in amygdala seeds.
@@ -37,6 +44,7 @@ stages:
     version: 1.0.0
 project_contract:
   design_types: [one_sample, two_independent_groups]
+  region_count: {minimum: 1}
   parameters:
     preprocessing.pipeline:
       type: enum

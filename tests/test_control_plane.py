@@ -553,7 +553,11 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
             {
                 "get_product_capabilities",
                 "list_available_seeds",
+                "get_pipeline_builder_capabilities",
+                "get_project_pipeline_graph",
+                "preview_pipeline_change",
                 "start_available_flow",
+                "compose_pipeline",
                 "run_available_flow",
                 "list_pipelines",
                 "list_datasets",
@@ -588,7 +592,7 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                 "resolve_project_parameter",
             },
         )
-        self.assertEqual(pipelines.structured_content["data"]["count"], 1)
+        self.assertEqual(pipelines.structured_content["data"]["count"], 2)
         self.assertEqual(datasets.structured_content["data"]["count"], 1)
         self.assertGreater(topics.structured_content["data"]["count"], 1)
         self.assertEqual(guidance.structured_content["data"]["returned_count"], 2)
@@ -669,6 +673,34 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
             started["data"]["project"]["spec"]["seeds"][0]["conn_source"],
             "networks.DefaultMode.MPFC (1,55,-3)",
         )
+
+    def test_modular_builder_exposes_roi_to_roi_and_change_impact(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(store, ROOT / "catalog")
+        builder = service.get_pipeline_builder_capabilities()["data"]
+        self.assertEqual(builder["composition_policy"], "validated_templates_only")
+        self.assertEqual(builder["template_count"], 2)
+        self.assertIn(
+            "rsfmri_roi_to_roi_v1",
+            {item["flow_id"] for item in builder["templates"]},
+        )
+        started = service.start_available_flow(
+            "owner", "rsfmri_roi_to_roi_v1", "study_001", "r2r", "ROI matrix",
+            ["atlas.Amygdala l", "atlas.Amygdala r"], True,
+        )
+        project = started["data"]["project"]
+        self.assertEqual(project["pipeline_id"], "rsfmri_roi_to_roi")
+        self.assertEqual(project["spec"]["composition"]["schema_version"], "conn_pilot_composition_v1")
+        graph = service.get_project_pipeline_graph("owner", project["id"])["data"]
+        self.assertEqual(graph["graph"]["analysis"]["kind"], "roi_to_roi")
+        preview = service.preview_pipeline_change(
+            "owner", project["id"],
+            {"seeds": [
+                project["spec"]["seeds"][0],
+                {**project["spec"]["seeds"][1], "conn_source": "atlas.Hippocampus r"},
+            ]},
+        )
+        self.assertEqual(preview["data"]["impact"]["execution_required_from"], "first_level_r2r")
 
     def test_run_available_flow_queues_a_fully_documented_project(self) -> None:
         store = FakeStore()

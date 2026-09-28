@@ -15,6 +15,7 @@ from .errors import ConnPilotError
 from .io import load_yaml, nested_get
 from .jobs import JobStore, queue_project
 from .project import ValidationResult, validate_project as validate_project_definition
+from .pipeline_graph import build_node_execution_plan
 
 
 REQUEST_SCHEMA = "conn_pilot_operation_request_v1"
@@ -231,6 +232,7 @@ class OperationService:
                 )
             },
             "stages": stages,
+            "node_execution_plan": build_node_execution_plan(project, pipeline),
             "parameters": parameters,
             "seeds": project.get("seeds", []),
             "design": project.get("design", {}),

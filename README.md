@@ -11,6 +11,7 @@ El motor local v0.1 implementa y validó de punta a punta el primer pipeline det
 - una sesión por sujeto;
 - una muestra o dos grupos independientes;
 - covariables continuas opcionales;
+- análisis seed-to-voxel y ROI-to-ROI mediante plantillas modulares versionadas;
 - preprocessing `default_mni`;
 - denoising aCompCor;
 - modelos de primer y segundo nivel;
@@ -128,6 +129,10 @@ MCP expone cuatro operaciones de alto nivel:
   covariables continuas y contrastes confirmados por el investigador.
 - `run_available_flow`: encola el análisis si está completo o devuelve la
   próxima decisión metodológica que debe tomar el investigador.
+- `get_pipeline_builder_capabilities`: publica plantillas y módulos compatibles.
+- `compose_pipeline`: crea un proyecto desde una plantilla modular validada.
+- `get_project_pipeline_graph`: muestra el grafo y las identidades de cada nodo.
+- `preview_pipeline_change`: anticipa qué nodos se reutilizan o invalidan.
 
 La ejecución guiada no elige parámetros científicos automáticamente. Cada
 parámetro requerido se resuelve con evidencia y confirmación del investigador.

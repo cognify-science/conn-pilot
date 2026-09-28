@@ -17,6 +17,7 @@ from conn_pilot.second_level import run_second_level_recalculation  # noqa: E402
 class SecondLevelTests(unittest.TestCase):
     def test_recalculation_freezes_subject_mask_and_uses_separate_folder(self) -> None:
         project = {
+            "pipeline": {"id": "rsfmri_seed_to_voxel", "version": "1.0.0"},
             "project": {"name": "sandbox"},
             "design": {
                 "type": "one_sample", "groups": {"sample": ["sub-001", "sub-002", "sub-003"]},
@@ -56,7 +57,8 @@ class SecondLevelTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError, "At least two"):
                 run_second_level_recalculation(
-                    {"project": {"name": "x"}, "design": {"type": "one_sample"},
+                    {"pipeline": {"id": "rsfmri_seed_to_voxel", "version": "1.0.0"},
+                     "project": {"name": "x"}, "design": {"type": "one_sample"},
                      "subjects": [{"id": "sub-001"}], "seeds": []},
                     Path(temporary), "run", "sha256:x", ["sub-001"],
                     {"matlab": {"executable": "matlab"}, "spm": {"root": "spm"},
@@ -65,6 +67,7 @@ class SecondLevelTests(unittest.TestCase):
 
     def test_recalculation_preserves_group_and_covariate_contrast(self) -> None:
         project = {
+            "pipeline": {"id": "rsfmri_seed_to_voxel", "version": "1.0.0"},
             "project": {"name": "groups"},
             "design": {
                 "type": "two_independent_groups",
@@ -94,6 +97,36 @@ class SecondLevelTests(unittest.TestCase):
             self.assertIn("{'control', 'patient', 'age'}", script)
             self.assertIn("{[1.0 0.0 0.0 0.0], [0.0 0.0 1.0 1.0], [20.0 0.0 40.0 50.0]}", script)
             self.assertEqual(result["manifest"]["design_type"], "two_independent_groups")
+
+    def test_roi_to_roi_recalculation_uses_rrc_model(self) -> None:
+        project = {
+            "pipeline": {"id": "rsfmri_roi_to_roi", "version": "1.0.0"},
+            "project": {"name": "roi"},
+            "design": {
+                "type": "one_sample", "groups": {"sample": ["s1", "s2"]},
+                "covariates": {},
+                "contrasts": [{"name": "mean", "effects": ["AllSubjects"], "weights": [1]}],
+            },
+            "subjects": [{"id": "s1"}, {"id": "s2"}],
+            "seeds": [{"conn_source": "atlas.Amygdala l"}, {"conn_source": "atlas.Amygdala r"}],
+        }
+        environment = {"matlab": {"executable": "matlab"}, "spm": {"root": "spm"}, "conn": {"root": "conn"}}
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            (run_dir / "roi.mat").write_bytes(b"mat")
+
+            def complete(*_args, **_kwargs):
+                output = run_dir / "roi" / "results" / "secondlevel" / "sample_aabbcc" / "mean"
+                output.mkdir(parents=True)
+                (output / "ROI.mat").write_bytes(b"roi")
+                return SimpleNamespace(returncode=0)
+
+            with patch("conn_pilot.second_level.subprocess.run", side_effect=complete):
+                result = run_second_level_recalculation(
+                    project, run_dir, "run", "sha256:aabbcc", ["s1", "s2"], environment
+                )
+        self.assertEqual(result["manifest"]["analysis"], "RRC_01")
+        self.assertEqual(result["manifest"]["model_count"], 1)
 
 
 if __name__ == "__main__":

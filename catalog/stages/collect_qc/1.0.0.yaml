@@ -1,6 +1,8 @@
 id: collect_qc
 version: 1.0.0
 kind: local_collection
+category: review_export
+status: validated
 requires: [preprocessed_data, denoised_data, second_level_results]
 provides: [qc_manifest, result_manifest]
-
+project_inputs: []

@@ -15,6 +15,9 @@ Las decisiones científicas sobre sujetos quedan siempre a cargo de un investiga
 | Aislamiento entre usuarios | pruebas de ownership | un usuario no puede leer ni alterar proyectos o jobs ajenos | aprobado |
 | Paquete reproducible | prueba ZIP | incluye PDF/HTML/JSON, decisiones, evidencia, imágenes/mapas y hashes | aprobado |
 | Flujo sin portal | herramientas MCP | literatura, ejecución, QC, recálculo, aceptación y paquete se completan desde Codex | aprobado por interfaz |
+| ROI-to-ROI modular | MATLAB R2023b, SPM25 y CONN 25.b sobre los derivados del sandbox | creó tres matrices `resultsROI_Subject*`, preparó segundo nivel y guardó `ROI.mat` | aprobado como prueba real del motor |
+| Grupos y covariable en ROI-to-ROI | dos grupos, covariable edad y contraste `[1 -1 0]` sobre el sandbox | CONN generó `ROI.mat` sin error | aprobado técnicamente; muestra insuficiente para inferencia científica |
+| Invalidación modular | comparación determinista de planes por nodo | cambiar semillas conserva inspección/preprocesamiento/denoising e invalida primer nivel y descendientes | aprobado por pruebas automáticas |
 
 ## Evidencia ejecutada
 

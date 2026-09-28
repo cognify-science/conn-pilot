@@ -9,6 +9,7 @@ from typing import Any
 
 from .catalog import ResolvedPipeline
 from .io import nested_get
+from .pipeline_graph import validate_composition
 
 
 @dataclass(frozen=True)
@@ -21,7 +22,9 @@ class ValidationResult:
         return {"valid": self.valid, "errors": list(self.errors), "warnings": list(self.warnings)}
 
 
-TOP_LEVEL_FIELDS = {"schema_version", "pipeline", "project", "dataset", "subjects", "design", "seeds", "parameters"}
+REQUIRED_TOP_LEVEL_FIELDS = {"schema_version", "pipeline", "project", "dataset", "subjects", "design", "seeds", "parameters"}
+OPTIONAL_TOP_LEVEL_FIELDS = {"composition"}
+TOP_LEVEL_FIELDS = REQUIRED_TOP_LEVEL_FIELDS | OPTIONAL_TOP_LEVEL_FIELDS
 PIPELINE_FIELDS = {"id", "version"}
 PROJECT_FIELDS = {"name", "research_question"}
 DATASET_FIELDS = {"layout", "root", "tr_seconds"}
@@ -39,9 +42,16 @@ def validate_project(project: dict[str, Any], pipeline: ResolvedPipeline, *, che
     unknown_top = sorted(set(project) - TOP_LEVEL_FIELDS)
     if unknown_top:
         errors.append(f"Unknown top-level fields: {', '.join(unknown_top)}")
-    for field in sorted(TOP_LEVEL_FIELDS):
+    for field in sorted(REQUIRED_TOP_LEVEL_FIELDS):
         if field not in project:
             errors.append(f"Missing top-level field: {field}")
+    schema_version = project.get("schema_version")
+    if schema_version not in {"conn_pilot_project_v1", "conn_pilot_project_v2"}:
+        errors.append("schema_version must be conn_pilot_project_v1 or conn_pilot_project_v2")
+    if schema_version == "conn_pilot_project_v2" and "composition" not in project:
+        errors.append("conn_pilot_project_v2 requires composition")
+    if schema_version == "conn_pilot_project_v1" and "composition" in project:
+        errors.append("composition requires conn_pilot_project_v2")
 
     pipeline_ref = project.get("pipeline", {})
     if not isinstance(pipeline_ref, dict):
@@ -68,8 +78,9 @@ def validate_project(project: dict[str, Any], pipeline: ResolvedPipeline, *, che
     _validate_dataset(project.get("dataset", {}), errors, warnings, check_paths)
     subjects = _validate_subjects(project.get("subjects"), errors, check_paths)
     _validate_design(project.get("design", {}), subjects, pipeline, errors, warnings)
-    _validate_seeds(project.get("seeds"), errors)
+    _validate_seeds(project.get("seeds"), pipeline, errors)
     _validate_parameters(project, pipeline, errors, warnings)
+    errors.extend(validate_composition(project.get("composition"), pipeline))
     return ValidationResult(not errors, tuple(_unique(errors)), tuple(_unique(warnings)))
 
 
@@ -211,7 +222,7 @@ def _validate_design(
             errors.append(f"{prefix} is not confirmed by the investigator")
 
 
-def _validate_seeds(value: Any, errors: list[str]) -> None:
+def _validate_seeds(value: Any, pipeline: ResolvedPipeline, errors: list[str]) -> None:
     if not isinstance(value, list) or not value:
         errors.append("seeds must contain at least one CONN source")
         return
@@ -232,6 +243,13 @@ def _validate_seeds(value: Any, errors: list[str]) -> None:
             errors.append(f"{prefix} is not confirmed by the investigator")
     if len(names) != len(set(names)):
         errors.append("seeds contain duplicate names")
+    minimum = int(
+        pipeline.definition.get("project_contract", {})
+        .get("region_count", {})
+        .get("minimum", 1)
+    )
+    if len(value) < minimum:
+        errors.append(f"Pipeline requires at least {minimum} confirmed regions")
 
 
 def _validate_parameters(project: dict[str, Any], pipeline: ResolvedPipeline, errors: list[str], warnings: list[str]) -> None:

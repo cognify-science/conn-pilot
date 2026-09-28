@@ -1,0 +1,8 @@
+id: second_level_r2r_glm
+version: 1.0.0
+kind: conn_batch
+category: second_level
+status: validated_engine_probe
+requires: [first_level_r2r]
+provides: [second_level_results]
+project_inputs: [design]

@@ -1,6 +1,8 @@
 id: first_level_sbc
 version: 1.0.0
 kind: conn_batch
+category: first_level
+status: validated
 requires: [denoised_data]
 provides: [first_level_sbc]
-
+project_inputs: [seeds]

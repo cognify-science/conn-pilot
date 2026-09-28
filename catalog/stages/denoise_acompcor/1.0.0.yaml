@@ -1,6 +1,8 @@
 id: denoise_acompcor
 version: 1.0.0
 kind: conn_batch
+category: denoising
+status: validated
 requires: [preprocessed_data]
 provides: [denoised_data]
-
+project_inputs: [parameters.denoising]

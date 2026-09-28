@@ -84,7 +84,7 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
                 result = await client.call_tool("list_pipelines", {})
         self.assertEqual({tool.name for tool in tools}, set(OPERATION_NAMES))
         self.assertFalse(result.is_error)
-        self.assertEqual(result.structured_content["data"]["count"], 1)
+        self.assertEqual(result.structured_content["data"]["count"], 2)
 
 
 if __name__ == "__main__":

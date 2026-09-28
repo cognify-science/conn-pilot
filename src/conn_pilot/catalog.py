@@ -89,14 +89,21 @@ class Catalog:
         family_path = path.parents[3] / "families" / f"{value['family']}.yaml"
         if not family_path.is_file():
             raise CatalogError(f"Unknown family {value['family']} in {path}")
+        analysis = value.get("execution", {}).get("analysis", {})
+        required_analysis = {"kind", "conn_name", "conn_type", "first_level_artifact", "second_level_artifact"}
+        if not required_analysis.issubset(analysis):
+            missing_analysis = sorted(required_analysis - set(analysis))
+            raise CatalogError(f"{path} execution.analysis misses fields: {', '.join(missing_analysis)}")
 
     @staticmethod
     def _validate_stage_order(stages: list[dict[str, Any]]) -> None:
         available: set[str] = {"project"}
         for stage in stages:
             stage_id = str(stage["id"])
+            for field in ("kind", "category", "status", "requires", "provides", "project_inputs"):
+                if field not in stage:
+                    raise CatalogError(f"Stage {stage_id} is missing {field}")
             missing = [item for item in stage.get("requires", []) if item not in available]
             if missing:
                 raise CatalogError(f"Stage {stage_id} has unresolved requirements: {', '.join(missing)}")
             available.update(str(item) for item in stage.get("provides", []))
-

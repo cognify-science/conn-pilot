@@ -20,6 +20,11 @@ from conn_pilot.jobs import JobStore, verify_outputs  # noqa: E402
 from conn_pilot.project import execution_identifier, validate_project  # noqa: E402
 from conn_pilot.results import collect_artifacts  # noqa: E402
 from conn_pilot.staging import stage_project_inputs  # noqa: E402
+from conn_pilot.pipeline_graph import (  # noqa: E402
+    compare_node_plans,
+    composition_snapshot,
+    resolve_pipeline_graph,
+)
 
 
 class EngineTests(unittest.TestCase):
@@ -31,6 +36,68 @@ class EngineTests(unittest.TestCase):
 
     def test_catalog_is_valid(self) -> None:
         self.assertEqual(self.catalog.validate_all(), [])
+
+    def test_modular_catalog_reuses_nodes_across_two_pipeline_families(self) -> None:
+        seed = self.catalog.resolve("rsfmri_seed_to_voxel", "1.0.0")
+        roi = self.catalog.resolve("rsfmri_roi_to_roi", "1.0.0")
+        seed_nodes = {(item["id"], item["version"]) for item in resolve_pipeline_graph(seed)["nodes"]}
+        roi_nodes = {(item["id"], item["version"]) for item in resolve_pipeline_graph(roi)["nodes"]}
+        self.assertLessEqual(
+            {
+                ("inspect_dataset", "1.0.0"),
+                ("preprocess_default_mni", "1.0.0"),
+                ("denoise_acompcor", "1.0.0"),
+                ("collect_qc", "1.0.0"),
+            },
+            seed_nodes & roi_nodes,
+        )
+
+    def test_node_invalidation_starts_at_the_changed_scientific_stage(self) -> None:
+        changed = copy.deepcopy(self.project)
+        changed["seeds"][0]["conn_source"] = "atlas.Amygdala r"
+        impact = compare_node_plans(self.project, changed, self.pipeline)
+        self.assertEqual(impact["execution_required_from"], "first_level_sbc")
+        self.assertLessEqual(
+            {"first_level_sbc", "second_level_glm", "collect_qc"},
+            set(impact["invalidated_nodes"]),
+        )
+        self.assertLessEqual(
+            {"inspect_dataset", "preprocess_default_mni", "denoise_acompcor"},
+            set(impact["reusable_nodes"]),
+        )
+
+    def test_roi_to_roi_pipeline_renders_a_distinct_conn_analysis(self) -> None:
+        pipeline = self.catalog.resolve("rsfmri_roi_to_roi", "1.0.0")
+        project = copy.deepcopy(self.project)
+        project["schema_version"] = "conn_pilot_project_v2"
+        project["pipeline"] = {"id": pipeline.id, "version": pipeline.version}
+        project["seeds"].append(
+            {
+                "name": "right_amygdala",
+                "conn_source": "atlas.Amygdala r",
+                "rationale": "Second region required for a connectivity matrix.",
+                "confirmed_by_investigator": True,
+            }
+        )
+        project["composition"] = composition_snapshot(pipeline)
+        result = validate_project(project, pipeline, check_paths=False)
+        self.assertTrue(result.valid, result.errors)
+        with tempfile.TemporaryDirectory() as directory:
+            target = generate_conn_batch(
+                project, ROOT / "examples/project.template.yaml", Path(directory)
+            )
+            text = target.read_text(encoding="utf-8")
+        self.assertIn("batch.Analysis.name = 'RRC_01';", text)
+        self.assertIn("batch.Analysis.type = 1;", text)
+        self.assertIn("results_batch_1.Results.name = 'RRC_01';", text)
+
+    def test_forged_modular_composition_is_rejected(self) -> None:
+        project = copy.deepcopy(self.project)
+        project["composition"] = composition_snapshot(self.pipeline)
+        project["composition"]["nodes"][0]["version"] = "999"
+        result = validate_project(project, self.pipeline, check_paths=False)
+        self.assertFalse(result.valid)
+        self.assertTrue(any("composition" in issue for issue in result.errors))
 
     def test_execution_identifier_is_short_stable_and_collision_resistant(self) -> None:
         first = execution_identifier("railway_parameter_resolver_pilot_20260926")
@@ -208,6 +275,30 @@ class EngineTests(unittest.TestCase):
             verification = verify_outputs(self.project, run_dir)
             self.assertTrue(verification["valid"], verification["missing"])
             self.assertEqual(verification["counts"]["first_level_maps"], 2)
+
+    def test_roi_to_roi_output_verifier_uses_matrix_artifacts(self) -> None:
+        project = copy.deepcopy(self.project)
+        project["pipeline"] = {"id": "rsfmri_roi_to_roi", "version": "1.0.0"}
+        project["seeds"].append(
+            {
+                "name": "right_amygdala", "conn_source": "atlas.Amygdala r",
+                "rationale": "Matrix pair.", "confirmed_by_investigator": True,
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory)
+            project_root = run_dir / "example_rsfmri"
+            (run_dir / "example_rsfmri.mat").write_bytes(b"project")
+            first = project_root / "results" / "firstlevel" / "RRC_01"
+            second = project_root / "results" / "secondlevel" / "RRC_01" / "sample_mean"
+            first.mkdir(parents=True)
+            second.mkdir(parents=True)
+            (first / "resultsROI_Subject001_Condition001.mat").write_bytes(b"matrix")
+            (second / "ROI.mat").write_bytes(b"model")
+            verification = verify_outputs(project, run_dir)
+        self.assertTrue(verification["valid"], verification["missing"])
+        self.assertEqual(verification["analysis"]["kind"], "roi_to_roi")
+        self.assertEqual(verification["counts"]["first_level_results"], 1)
 
 
 if __name__ == "__main__":

@@ -92,7 +92,7 @@ class OperationTests(unittest.TestCase):
         for response in responses:
             self.assertEqual(response["schema_version"], RESPONSE_SCHEMA)
             self.assertTrue(response["ok"], response["errors"])
-        self.assertEqual(responses[0]["data"]["count"], 1)
+        self.assertEqual(responses[0]["data"]["count"], 2)
         self.assertTrue(responses[1]["data"]["ready"])
         self.assertTrue(responses[2]["data"]["valid"])
         self.assertTrue(responses[3]["data"]["ready_to_submit"])

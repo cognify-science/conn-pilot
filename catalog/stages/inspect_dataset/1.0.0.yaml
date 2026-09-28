@@ -1,6 +1,8 @@
 id: inspect_dataset
 version: 1.0.0
 kind: validation
+category: input
+status: validated
 requires: [project]
 provides: [dataset_inventory]
-
+project_inputs: [dataset, subjects]

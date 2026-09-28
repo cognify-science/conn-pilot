@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .analysis_contract import analysis_contract
 from .io import write_json
 from .project import execution_identifier
 
@@ -21,6 +22,7 @@ def run_second_level_recalculation(
 ) -> dict[str, Any]:
     """Recompute CONN second-level contrasts for a frozen accepted-subject sample."""
     design = project.get("design", {})
+    analysis = analysis_contract(project)
     design_type = design.get("type")
     if design_type not in {"one_sample", "two_independent_groups"}:
         raise ValueError(f"Unsupported design for versioned recalculation: {design_type}")
@@ -89,7 +91,7 @@ def run_second_level_recalculation(
             [
                 f"clear results_batch_{index};",
                 f"results_batch_{index}.filename = project_file;",
-                f"results_batch_{index}.Results.name = 'SBC_01';",
+                f"results_batch_{index}.Results.name = '{_matlab(analysis['conn_name'])}';",
                 f"results_batch_{index}.Results.foldername = '{_matlab(contrast_folder)}';",
                 f"results_batch_{index}.Results.saveas = '{_matlab(_safe_identifier(str(contrast['name'])))}';",
                 f"results_batch_{index}.Results.between_subjects.effect_names = {_cell(names)};",
@@ -126,9 +128,10 @@ def run_second_level_recalculation(
         )
     if completed.returncode != 0:
         raise RuntimeError(f"MATLAB second-level recalculation exited with code {completed.returncode}")
-    spm_models = sorted(output_dir.glob("**/SPM.mat")) if output_dir.is_dir() else []
-    if not spm_models:
-        raise RuntimeError("CONN did not create the expected versioned second-level SPM model")
+    model_pattern = "**/SPM.mat" if analysis["kind"] == "seed_to_voxel" else "**/ROI.mat"
+    models = sorted(output_dir.glob(model_pattern)) if output_dir.is_dir() else []
+    if not models:
+        raise RuntimeError("CONN did not create the expected versioned second-level model")
     result_files = sorted(
         path for path in output_dir.glob("**/*")
         if path.is_file() and path.suffix.lower() in {".mat", ".nii", ".json"}
@@ -142,7 +145,8 @@ def run_second_level_recalculation(
         "excluded_subject_ids": [value for value in subject_ids if value not in included],
         "subject_mask": mask,
         "design_type": design_type,
-        "analysis": "SBC_01",
+        "analysis": analysis["conn_name"],
+        "analysis_kind": analysis["kind"],
         "contrasts": [
             {
                 "name": str(contrast["name"]),
@@ -153,7 +157,7 @@ def run_second_level_recalculation(
         ],
         "effect_vectors": effect_vectors,
         "source_names": sources,
-        "model_count": len(spm_models),
+        "model_count": len(models),
         "files": [
             {
                 "relative_path": path.relative_to(output_dir).as_posix(),

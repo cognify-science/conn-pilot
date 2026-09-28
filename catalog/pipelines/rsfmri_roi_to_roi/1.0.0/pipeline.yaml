@@ -1,0 +1,185 @@
+id: rsfmri_roi_to_roi
+version: 1.0.0
+family: roi_to_roi
+status: validated_engine_probe
+description: Resting-state ROI-to-ROI connectivity analysis for one sample or two
+  independent groups.
+execution:
+  analysis:
+    kind: roi_to_roi
+    conn_name: RRC_01
+    conn_type: 1
+    first_level_artifact: connectivity_matrices
+    second_level_artifact: roi_models
+validation:
+  date: '2026-09-27'
+  scope: Real first- and second-level ROI-to-ROI execution over the existing
+    three-subject sandbox derivatives; full remote raw-BIDS execution pending.
+  environment:
+    matlab: R2023b
+    spm: SPM25
+    conn: 25.b
+  evidence: CONN created three subject connectivity matrices and ROI.mat for both
+    a one-sample model and a two-group contrast adjusted by a covariate.
+compatibility:
+  matlab: R2023b
+  spm: SPM25
+  conn: 25.b
+scope:
+  dataset_layout: bids
+  input_state: raw
+  sessions_per_subject: 1
+  normalization_space: MNI
+  analysis: RRC
+  limitations:
+  - No longitudinal or repeated-measures designs.
+  - No subject-specific ROI files.
+  - At least two built-in CONN regions are required.
+  - Statistical display thresholds are outside this version of the execution contract.
+stages:
+- id: inspect_dataset
+  version: 1.0.0
+- id: preprocess_default_mni
+  version: 1.0.0
+- id: denoise_acompcor
+  version: 1.0.0
+- id: first_level_r2r
+  version: 1.0.0
+- id: second_level_r2r_glm
+  version: 1.0.0
+- id: collect_qc
+  version: 1.0.0
+project_contract:
+  design_types:
+  - one_sample
+  - two_independent_groups
+  region_count:
+    minimum: 2
+  parameters:
+    preprocessing.pipeline:
+      type: enum
+      values:
+      - default_mni
+      confirmation_required: false
+      maps_to: batch.Setup.preprocessing.steps
+    preprocessing.smoothing_fwhm_mm:
+      type: number
+      minimum: 0
+      maximum: 20
+      confirmation_required: true
+      maps_to: batch.Setup.preprocessing.fwhm
+      literature_guidance:
+        topic: spatial_smoothing
+        normalizer: millimeters
+        required_remote: true
+        sources:
+        - component_id: reported_preprocessing
+          parameter_names:
+          - smoothing_fwhm_mm
+          - smoothing_fwhm
+    preprocessing.outlier_fd_threshold_mm:
+      type: number
+      minimum: 0.1
+      maximum: 5
+      confirmation_required: true
+      maps_to: batch.Setup.preprocessing.art_thresholds[2]
+      literature_guidance:
+        topic: art_outlier_thresholds
+        normalizer: millimeters
+        required_remote: true
+        sources:
+        - component_id: reported_preprocessing
+          parameter_names:
+          - art_motion_threshold
+        - component_id: reported_qc
+          parameter_names:
+          - fd_threshold
+    preprocessing.global_signal_z_threshold:
+      type: number
+      minimum: 0.5
+      maximum: 20
+      confirmation_required: true
+      maps_to: batch.Setup.preprocessing.art_thresholds[1]
+      literature_guidance:
+        topic: art_outlier_thresholds
+        normalizer: standard_deviations
+        required_remote: true
+        sources:
+        - component_id: reported_preprocessing
+          parameter_names:
+          - art_global_signal_threshold
+        - component_id: reported_qc
+          parameter_names:
+          - global_signal_threshold
+    denoising.method:
+      type: enum
+      values:
+      - aCompCor
+      confirmation_required: true
+      maps_to: batch.Denoising.confounds
+    denoising.wm_components:
+      type: integer
+      minimum: 1
+      confirmation_required: true
+      maps_to: batch.Denoising.confounds.dimensions[1]
+      literature_guidance:
+        topic: acompcor_components
+        normalizer: integer_scalar
+        required_remote: true
+        sources:
+        - component_id: reported_denoising
+          parameter_names:
+          - wm_components
+    denoising.csf_components:
+      type: integer
+      minimum: 1
+      confirmation_required: true
+      maps_to: batch.Denoising.confounds.dimensions[2]
+      literature_guidance:
+        topic: acompcor_components
+        normalizer: integer_scalar
+        required_remote: true
+        sources:
+        - component_id: reported_denoising
+          parameter_names:
+          - csf_components
+    denoising.bandpass_filter_hz:
+      type: number_pair
+      confirmation_required: true
+      maps_to: batch.Denoising.filter
+      literature_guidance:
+        topic: temporal_filter
+        normalizer: frequency_pair_hz
+        required_remote: true
+        sources:
+        - component_id: reported_denoising
+          parameter_names:
+          - bandpass_filter
+          - bandpass_filter_hz
+    denoising.detrending_order:
+      type: integer
+      minimum: 0
+      confirmation_required: false
+      maps_to: batch.Denoising.detrending
+    denoising.despiking:
+      type: enum
+      values:
+      - 0
+      - 1
+      - 2
+      confirmation_required: false
+      maps_to: batch.Denoising.despiking
+    denoising.global_signal_regression:
+      type: boolean
+      confirmation_required: true
+      implemented_values:
+      - false
+      maps_to: explicit_no_gsr_policy
+      literature_guidance:
+        topic: global_signal_regression
+        normalizer: boolean
+        required_remote: true
+        sources:
+        - component_id: reported_denoising
+          parameter_names:
+          - global_signal_regression

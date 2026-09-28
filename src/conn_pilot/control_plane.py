@@ -41,14 +41,26 @@ from .project import validate_project as validate_project_definition
 from .reporting import build_reproducibility_package
 from .portal import review_portal_html
 from .seed_catalog import SeedCatalog
+from .pipeline_graph import (
+    build_node_execution_plan,
+    compare_node_plans,
+    composition_snapshot,
+    resolve_pipeline_graph,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTROL_RESPONSE_SCHEMA = "conn_pilot_control_response_v1"
 REMOTE_SPEC_FIELDS = {"project", "design", "seeds", "parameters"}
+REMOTE_SPEC_OPTIONAL_FIELDS = {"composition"}
 GUIDED_FLOW_ID = "rsfmri_seed_to_voxel_v1"
 LEGACY_GUIDED_FLOW_IDS = {"rsfmri_seed_to_voxel_one_sample_v1"}
 GUIDED_PIPELINE = ("rsfmri_seed_to_voxel", "1.0.0")
+ROI_TO_ROI_FLOW_ID = "rsfmri_roi_to_roi_v1"
+GUIDED_FLOWS = {
+    GUIDED_FLOW_ID: GUIDED_PIPELINE,
+    ROI_TO_ROI_FLOW_ID: ("rsfmri_roi_to_roi", "1.0.0"),
+}
 LEGACY_GUIDED_SEEDS = {
     "left_amygdala": "atlas.Amygdala l",
     "right_amygdala": "atlas.Amygdala r",
@@ -388,7 +400,6 @@ class ControlPlaneService:
         health = self.store.get_system_health()
         workers = {str(item.get("id")): item for item in health.get("workers", [])}
         datasets = self.store.list_datasets()
-        pipeline = self.catalog.resolve(*GUIDED_PIPELINE)
         availability = []
         for dataset in datasets:
             reasons: list[str] = []
@@ -412,39 +423,50 @@ class ControlPlaneService:
                     "unavailable_reasons": reasons,
                 }
             )
-        guided_parameters = [
-            path
-            for path, specification in pipeline.definition["project_contract"]
-            .get("parameters", {})
-            .items()
-            if (specification.get("literature_guidance") or {}).get("required_remote")
-        ]
-        flow = {
-            "id": GUIDED_FLOW_ID,
-            "label": "Resting-state seed-to-voxel",
-            "description": pipeline.definition.get("description", ""),
-            "pipeline": {"id": pipeline.id, "version": pipeline.version},
-            "design_options": pipeline.definition["project_contract"].get("design_types", []),
-            "input": {"layout": "bids", "state": "raw", "sessions_per_subject": 1},
-            "seed_catalog": {
-                "catalog_version": self.seed_catalog.metadata.get("catalog_version"),
-                "conn_version": self.seed_catalog.metadata.get("conn_version"),
-                "seed_count": self.seed_catalog.metadata.get("seed_count"),
-                "collections": self.seed_catalog.metadata.get("collections"),
-                "search_tool": "list_available_seeds",
-            },
-            "stages": [stage["id"] for stage in pipeline.stages],
-            "investigator_parameter_decisions": guided_parameters,
-            "outputs": [
-                "subject_qc_images_and_metrics",
-                "first_level_seed_to_voxel_maps",
-                "versioned_second_level_results",
-                "reproducibility_package",
-            ],
-            "limitations": pipeline.definition.get("scope", {}).get("limitations", []),
-            "availability": availability,
-            "start_tool": "start_available_flow",
-        }
+        flows = []
+        for flow_id, pipeline_ref in GUIDED_FLOWS.items():
+            pipeline = self.catalog.resolve(*pipeline_ref)
+            analysis = pipeline.definition.get("execution", {}).get("analysis", {})
+            guided_parameters = [
+                path
+                for path, specification in pipeline.definition["project_contract"]
+                .get("parameters", {}).items()
+                if (specification.get("literature_guidance") or {}).get("required_remote")
+            ]
+            flows.append(
+                {
+                    "id": flow_id,
+                    "label": (
+                        "Resting-state seed-to-voxel"
+                        if analysis.get("kind") == "seed_to_voxel"
+                        else "Resting-state ROI-to-ROI"
+                    ),
+                    "status": pipeline.definition.get("status"),
+                    "description": pipeline.definition.get("description", ""),
+                    "pipeline": {"id": pipeline.id, "version": pipeline.version},
+                    "design_options": pipeline.definition["project_contract"].get("design_types", []),
+                    "minimum_regions": pipeline.definition["project_contract"].get("region_count", {}).get("minimum", 1),
+                    "input": {"layout": "bids", "state": "raw", "sessions_per_subject": 1},
+                    "seed_catalog": {
+                        "catalog_version": self.seed_catalog.metadata.get("catalog_version"),
+                        "conn_version": self.seed_catalog.metadata.get("conn_version"),
+                        "seed_count": self.seed_catalog.metadata.get("seed_count"),
+                        "collections": self.seed_catalog.metadata.get("collections"),
+                        "search_tool": "list_available_seeds",
+                    },
+                    "graph": resolve_pipeline_graph(pipeline),
+                    "investigator_parameter_decisions": guided_parameters,
+                    "outputs": [
+                        "subject_qc_images_and_metrics",
+                        analysis.get("first_level_artifact"),
+                        "versioned_second_level_results",
+                        "reproducibility_package",
+                    ],
+                    "limitations": pipeline.definition.get("scope", {}).get("limitations", []),
+                    "availability": availability,
+                    "start_tool": "compose_pipeline",
+                }
+            )
         return _response(
             "get_product_capabilities",
             {
@@ -456,6 +478,8 @@ class ControlPlaneService:
                 "capabilities": [
                     "literature_guided_parameter_selection",
                     "validated_conn_execution",
+                    "modular_versioned_pipeline_graphs",
+                    "seed_to_voxel_and_roi_to_roi",
                     "one_sample_or_two_independent_group_designs",
                     "continuous_covariates_and_investigator_defined_contrasts",
                     "subject_level_quality_review",
@@ -463,13 +487,13 @@ class ControlPlaneService:
                     "scientific_acceptance",
                     "reproducibility_export",
                 ],
-                "guided_flows": [flow],
-                "guided_flow_count": 1,
+                "guided_flows": flows,
+                "guided_flow_count": len(flows),
                 "ready_for_execution": any(item["available"] for item in availability),
                 "workflow": [
                     "get_product_capabilities",
                     "list_available_seeds",
-                    "start_available_flow",
+                    "compose_pipeline",
                     "resolve_project_parameter",
                     "run_available_flow",
                     "get_job_status",
@@ -496,8 +520,11 @@ class ControlPlaneService:
         covariates: dict[str, dict[str, float]] | None = None,
         contrasts: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        if flow_id != GUIDED_FLOW_ID and flow_id not in LEGACY_GUIDED_FLOW_IDS:
+        normalized_flow_id = GUIDED_FLOW_ID if flow_id in LEGACY_GUIDED_FLOW_IDS else flow_id
+        if normalized_flow_id not in GUIDED_FLOWS:
             raise ValueError(f"Unknown guided flow: {flow_id}")
+        pipeline_ref = GUIDED_FLOWS[normalized_flow_id]
+        pipeline = self.catalog.resolve(*pipeline_ref)
         if not isinstance(project_name, str) or not project_name.strip():
             raise ValueError("project_name is required")
         if not isinstance(research_question, str) or not research_question.strip():
@@ -506,6 +533,13 @@ class ControlPlaneService:
             raise ValueError("Select at least one seed_id from the published seed catalog")
         selected = [LEGACY_GUIDED_SEEDS.get(str(value), str(value)) for value in seed_ids]
         selected_seeds = self.seed_catalog.resolve(selected)
+        minimum_regions = int(
+            pipeline.definition["project_contract"].get("region_count", {}).get("minimum", 1)
+        )
+        if len(selected_seeds) < minimum_regions:
+            raise ValueError(
+                f"Flow {normalized_flow_id} requires at least {minimum_regions} regions"
+            )
         dataset = self._dataset(dataset_id)
         health = self.store.get_system_health()
         worker = next(
@@ -539,12 +573,12 @@ class ControlPlaneService:
             contrasts=contrasts,
         )
         spec = _guided_flow_spec(
-            project_name.strip(), research_question.strip(), design, selected_seeds
+            project_name.strip(), research_question.strip(), design, selected_seeds,
+            composition=composition_snapshot(pipeline),
         )
         project = self.store.create_project(
-            subject, dataset_id, GUIDED_PIPELINE[0], GUIDED_PIPELINE[1], spec
+            subject, dataset_id, pipeline_ref[0], pipeline_ref[1], spec
         )
-        pipeline = self.catalog.resolve(*GUIDED_PIPELINE)
         unresolved = [
             item
             for item in self._parameter_resolution_status(subject, project, dataset, pipeline)
@@ -555,7 +589,7 @@ class ControlPlaneService:
             "start_available_flow",
             {
                 "status": "needs_parameter_decisions" if unresolved else "ready_to_run",
-                "flow_id": flow_id,
+                "flow_id": normalized_flow_id,
                 "project": project,
                 "unresolved_parameter_count": len(unresolved),
                 "unresolved_parameter_paths": [item["parameter_path"] for item in unresolved],
@@ -576,7 +610,11 @@ class ControlPlaneService:
 
     def run_available_flow(self, subject: str, project_id: str) -> dict[str, Any]:
         project = self._project(project_id, subject)
-        if (project["pipeline_id"], project["pipeline_version"]) != GUIDED_PIPELINE:
+        pipeline_ref = (project["pipeline_id"], project["pipeline_version"])
+        flow_id = next(
+            (key for key, value in GUIDED_FLOWS.items() if value == pipeline_ref), None
+        )
+        if not flow_id:
             raise ValueError("Project is not associated with a guided product flow")
         dataset = self._dataset(project["dataset_id"])
         pipeline = self.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
@@ -611,7 +649,7 @@ class ControlPlaneService:
                 "run_available_flow",
                 {
                     "status": existing["state"],
-                    "flow_id": GUIDED_FLOW_ID,
+                    "flow_id": flow_id,
                     "project_id": project_id,
                     "job": existing,
                     "reused_existing_job": True,
@@ -634,12 +672,95 @@ class ControlPlaneService:
             "run_available_flow",
             {
                 "status": "queued",
-                "flow_id": GUIDED_FLOW_ID,
+                "flow_id": flow_id,
                 "project_id": project_id,
                 "job": job,
                 "reused_existing_job": False,
                 "next_action": {"tool": "get_job_status", "arguments": {"job_id": job["id"]}},
             },
+        )
+
+    def get_pipeline_builder_capabilities(self) -> dict[str, Any]:
+        templates = []
+        modules: dict[tuple[str, str], dict[str, Any]] = {}
+        for flow_id, pipeline_ref in GUIDED_FLOWS.items():
+            pipeline = self.catalog.resolve(*pipeline_ref)
+            graph = resolve_pipeline_graph(pipeline)
+            templates.append(
+                {
+                    "flow_id": flow_id,
+                    "pipeline": graph["pipeline"],
+                    "status": graph["status"],
+                    "analysis": graph["analysis"],
+                    "design_options": pipeline.definition["project_contract"].get("design_types", []),
+                    "minimum_regions": pipeline.definition["project_contract"].get("region_count", {}).get("minimum", 1),
+                    "graph": graph,
+                }
+            )
+            for node in graph["nodes"]:
+                key = (node["id"], node["version"])
+                modules[key] = {
+                    name: node[name]
+                    for name in (
+                        "id", "version", "kind", "category", "status",
+                        "requires", "provides", "project_inputs",
+                    )
+                }
+        return _response(
+            "get_pipeline_builder_capabilities",
+            {
+                "composition_policy": "validated_templates_only",
+                "free_matlab_allowed": False,
+                "templates": templates,
+                "template_count": len(templates),
+                "modules": list(modules.values()),
+                "module_count": len(modules),
+            },
+        )
+
+    def get_project_pipeline_graph(
+        self, subject: str, project_id: str
+    ) -> dict[str, Any]:
+        project = self._project(project_id, subject)
+        dataset = self._dataset(project["dataset_id"])
+        pipeline = self.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
+        definition = materialize_remote_project(project, dataset, use_placeholders=True)
+        return _response(
+            "get_project_pipeline_graph",
+            {
+                "project_id": project_id,
+                "graph": resolve_pipeline_graph(pipeline),
+                "execution_plan": build_node_execution_plan(definition, pipeline),
+            },
+        )
+
+    def preview_pipeline_change(
+        self, subject: str, project_id: str, changes: dict[str, Any]
+    ) -> dict[str, Any]:
+        project = self._project(project_id, subject)
+        if not isinstance(changes, dict) or not changes:
+            raise ValueError("changes must be a non-empty mapping")
+        unknown = sorted(set(changes) - REMOTE_SPEC_FIELDS - REMOTE_SPEC_OPTIONAL_FIELDS)
+        if unknown:
+            raise ValueError("Unsupported change fields: " + ", ".join(unknown))
+        dataset = self._dataset(project["dataset_id"])
+        pipeline = self.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
+        current = materialize_remote_project(project, dataset, use_placeholders=True)
+        candidate_project = {**project, "spec": _deep_merge(project["spec"], changes)}
+        candidate = materialize_remote_project(candidate_project, dataset, use_placeholders=True)
+        validation = validate_project_definition(candidate, pipeline, check_paths=False)
+        impact = compare_node_plans(current, candidate, pipeline)
+        return _response(
+            "preview_pipeline_change",
+            {
+                "project_id": project_id,
+                "valid": validation.valid,
+                "impact": impact,
+                "candidate_execution_plan": build_node_execution_plan(candidate, pipeline),
+            },
+            ok=validation.valid,
+            errors=list(validation.errors),
+            warnings=list(validation.warnings),
         )
 
     def create_review_link(
@@ -673,7 +794,7 @@ class ControlPlaneService:
         pipeline = self.catalog.resolve(pipeline_id, pipeline_version)
         if not isinstance(spec, dict):
             raise ValueError("spec must be an object")
-        unknown = sorted(set(spec) - REMOTE_SPEC_FIELDS)
+        unknown = sorted(set(spec) - REMOTE_SPEC_FIELDS - REMOTE_SPEC_OPTIONAL_FIELDS)
         missing = sorted(REMOTE_SPEC_FIELDS - set(spec))
         if unknown:
             raise ValueError(f"Unknown project spec fields: {', '.join(unknown)}")
@@ -763,6 +884,9 @@ class ControlPlaneService:
             "worker_id": dataset["worker_id"],
             "pipeline": {"id": pipeline.id, "version": pipeline.version},
             "stages": stages,
+            "node_execution_plan": build_node_execution_plan(
+                materialize_remote_project(project, dataset, use_placeholders=True), pipeline
+            ),
             "resolved_parameters": resolved_parameters,
             "method_decisions": [
                 {
@@ -1506,8 +1630,8 @@ def materialize_remote_project(
             {"id": subject_id, "functional": functional, "structural": structural}
         )
     spec = project["spec"]
-    return {
-        "schema_version": "conn_pilot_project_v1",
+    value = {
+        "schema_version": "conn_pilot_project_v2" if spec.get("composition") else "conn_pilot_project_v1",
         "pipeline": {"id": project["pipeline_id"], "version": project["pipeline_version"]},
         "project": spec["project"],
         "dataset": {
@@ -1520,6 +1644,9 @@ def materialize_remote_project(
         "seeds": spec["seeds"],
         "parameters": spec["parameters"],
     }
+    if spec.get("composition") is not None:
+        value["composition"] = spec["composition"]
+    return value
 
 
 def load_control_settings() -> ControlSettings:
@@ -1636,6 +1763,21 @@ def build_control_plane_server(
         """Search built-in CONN atlas, network, and Schaefer seed regions by name."""
         return service.list_available_seeds(query, collection, limit, offset)
 
+    @server.tool(annotations=read_only)
+    def get_pipeline_builder_capabilities() -> dict[str, Any]:
+        """List validated modular templates, reusable nodes, and their compatibility contracts."""
+        return service.get_pipeline_builder_capabilities()
+
+    @server.tool(annotations=read_only)
+    def get_project_pipeline_graph(project_id: str) -> dict[str, Any]:
+        """Show the resolved node graph and immutable execution plan for an owned project."""
+        return service.get_project_pipeline_graph(subject(), project_id)
+
+    @server.tool(annotations=read_only)
+    def preview_pipeline_change(project_id: str, changes: dict[str, Any]) -> dict[str, Any]:
+        """Validate proposed scientific changes and show reusable versus invalidated nodes without saving."""
+        return service.preview_pipeline_change(subject(), project_id, changes)
+
     @server.tool(
         annotations=ToolAnnotations(
             read_only_hint=False,
@@ -1660,6 +1802,33 @@ def build_control_plane_server(
             subject(), flow_id, dataset_id, project_name, research_question, seed_ids,
             storage.available, design_type, groups, covariates, contrasts,
         )
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=False,
+        )
+    )
+    def compose_pipeline(
+        flow_id: str,
+        dataset_id: str,
+        project_name: str,
+        research_question: str,
+        seed_ids: list[str],
+        design_type: str = "one_sample",
+        groups: dict[str, list[str]] | None = None,
+        covariates: dict[str, dict[str, float]] | None = None,
+        contrasts: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Compose an owned project from a validated modular template and scientific choices."""
+        response = service.start_available_flow(
+            subject(), flow_id, dataset_id, project_name, research_question, seed_ids,
+            storage.available, design_type, groups, covariates, contrasts,
+        )
+        response["operation"] = "compose_pipeline"
+        return response
 
     @server.tool(
         annotations=ToolAnnotations(
@@ -2171,6 +2340,10 @@ def build_control_plane_server(
             return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
         job_id, owner = str(session["job_id"]), str(session["owner_subject"])
         response = service.get_qc_summary(owner, job_id)
+        job = service._job(job_id, owner)
+        project = service._project(job["project_id"], owner)
+        pipeline = service.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
+        response["data"]["pipeline_graph"] = resolve_pipeline_graph(pipeline)
         evidence = service.get_subject_qc_evidence(owner, job_id)
         by_id = {item["subject_id"]: item for item in evidence["data"]["subjects"]}
         for item in response["data"]["review"]["subject_quality"]["subjects"]:
@@ -2279,11 +2452,22 @@ def _safe_package_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", Path(value).name).strip("._") or "artifact"
 
 
+def _deep_merge(original: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
+    result = json.loads(json.dumps(original))
+    for key, value in changes.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 def _guided_flow_spec(
     project_name: str,
     research_question: str,
     design: dict[str, Any],
     seeds: list[dict[str, Any]],
+    composition: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     def fixed(value: Any, rationale: str, *, confirmed: bool = True) -> dict[str, Any]:
         return {
@@ -2301,7 +2485,7 @@ def _guided_flow_spec(
             "confirmed_by_investigator": False,
         }
 
-    return {
+    value = {
         "project": {"name": project_name, "research_question": research_question},
         "design": design,
         "seeds": [
@@ -2349,6 +2533,9 @@ def _guided_flow_spec(
             },
         },
     }
+    if composition is not None:
+        value["composition"] = composition
+    return value
 
 
 def _guided_design(

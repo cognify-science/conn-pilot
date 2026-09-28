@@ -11,11 +11,13 @@ from pathlib import Path
 from typing import Any
 
 from .adapter import generate_conn_batch
+from .analysis_contract import analysis_contract
 from .environment import _matlab_environment
 from .errors import ExecutionError
 from .io import sha256_file, write_json, write_yaml
 from .project import execution_identifier
 from .results import collect_artifacts
+from .pipeline_graph import build_node_execution_plan
 from .staging import stage_project_inputs
 
 
@@ -199,35 +201,52 @@ def execute_queued_project(
 def verify_outputs(project: dict[str, Any], run_dir: Path) -> dict[str, Any]:
     name = execution_identifier(project["project"]["name"])
     project_dir = run_dir / name
+    analysis = analysis_contract(project)
+    analysis_name = str(analysis["conn_name"])
     expected = {
         "conn_project": run_dir / f"{name}.mat",
-        "first_level": project_dir / "results" / "firstlevel" / "SBC_01",
-        "second_level": project_dir / "results" / "secondlevel" / "SBC_01",
+        "first_level": project_dir / "results" / "firstlevel" / analysis_name,
+        "second_level": project_dir / "results" / "secondlevel" / analysis_name,
     }
     missing = [key for key, path in expected.items() if not path.exists()]
-    expected_first_level_maps = len(project["subjects"]) * len(project["seeds"])
-    first_level_maps = (
-        len(list(expected["first_level"].glob("BETA_Subject*_Condition*_Source*.nii")))
-        if expected["first_level"].is_dir()
-        else 0
-    )
-    second_level_models = (
-        len(list(expected["second_level"].glob("**/SPM.mat"))) if expected["second_level"].is_dir() else 0
-    )
-    if first_level_maps < expected_first_level_maps:
-        missing.append("first_level_maps")
-    if second_level_models < len(project["design"]["contrasts"]):
-        missing.append("second_level_models")
+    if analysis["kind"] == "seed_to_voxel":
+        expected_first_level = len(project["subjects"]) * len(project["seeds"])
+        first_level = (
+            len(list(expected["first_level"].glob("BETA_Subject*_Condition*_Source*.nii")))
+            if expected["first_level"].is_dir() else 0
+        )
+        second_level = (
+            len(list(expected["second_level"].glob("**/SPM.mat")))
+            if expected["second_level"].is_dir() else 0
+        )
+    else:
+        expected_first_level = len(project["subjects"])
+        first_level = (
+            len(list(expected["first_level"].glob("resultsROI_Subject*_Condition*.mat")))
+            if expected["first_level"].is_dir() else 0
+        )
+        second_level = (
+            len(list(expected["second_level"].glob("**/ROI.mat")))
+            if expected["second_level"].is_dir() else 0
+        )
+    if first_level < expected_first_level:
+        missing.append(str(analysis["first_level_artifact"]))
+    if second_level < len(project["design"]["contrasts"]):
+        missing.append(str(analysis["second_level_artifact"]))
     return {
         "valid": not missing,
         "missing": missing,
         "paths": {key: str(path) for key, path in expected.items()},
         "counts": {
-            "first_level_maps": first_level_maps,
-            "expected_first_level_maps": expected_first_level_maps,
-            "second_level_models": second_level_models,
+            "first_level_results": first_level,
+            "expected_first_level_results": expected_first_level,
+            "second_level_results": second_level,
             "expected_second_level_models": len(project["design"]["contrasts"]),
+            "first_level_maps": first_level if analysis["kind"] == "seed_to_voxel" else 0,
+            "expected_first_level_maps": expected_first_level if analysis["kind"] == "seed_to_voxel" else 0,
+            "second_level_models": second_level if analysis["kind"] == "seed_to_voxel" else 0,
         },
+        "analysis": analysis,
     }
 
 
@@ -240,11 +259,17 @@ def build_manifest(
     verification: dict[str, Any],
     staged_inputs: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    from .catalog import Catalog
+
+    pipeline = Catalog(Path(__file__).resolve().parents[2] / "catalog").resolve(
+        str(project["pipeline"]["id"]), str(project["pipeline"]["version"])
+    )
     return {
         "schema_version": "conn_pilot_run_manifest_v0.1",
         "created_at": _now(),
         "project": project["project"],
         "pipeline": project["pipeline"],
+        "node_execution_plan": build_node_execution_plan(project, pipeline),
         "environment": {
             "matlab": environment["matlab"].get("release"),
             "spm": environment["spm"].get("version"),
