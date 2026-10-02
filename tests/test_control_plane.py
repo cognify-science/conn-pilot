@@ -573,6 +573,7 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                 "get_job_logs",
                 "list_results",
                 "get_qc_summary",
+                "get_experiment_quality_report",
                 "get_subject_qc",
                 "set_subject_qc_decision",
                 "record_scientific_decision",

@@ -52,8 +52,15 @@
       "second-level results are current for the effective sample"
     ]
   },
+  "experiment_quality_report": {
+    "contract": "experiment_quality_report.v1.json",
+    "hypothesis_first": true,
+    "quality_must_permit_interpretation_before_hypothesis_assessment": true,
+    "technical_success_is_not_scientific_validation": true
+  },
   "mcp_tools": [
     "get_qc_summary",
+    "get_experiment_quality_report",
     "get_subject_qc",
     "set_subject_qc_decision",
     "record_scientific_decision",

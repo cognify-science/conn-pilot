@@ -23,7 +23,7 @@ class ValidationResult:
 
 
 REQUIRED_TOP_LEVEL_FIELDS = {"schema_version", "pipeline", "project", "dataset", "subjects", "design", "seeds", "parameters"}
-OPTIONAL_TOP_LEVEL_FIELDS = {"composition"}
+OPTIONAL_TOP_LEVEL_FIELDS = {"composition", "hypothesis"}
 TOP_LEVEL_FIELDS = REQUIRED_TOP_LEVEL_FIELDS | OPTIONAL_TOP_LEVEL_FIELDS
 PIPELINE_FIELDS = {"id", "version"}
 PROJECT_FIELDS = {"name", "research_question"}
@@ -34,6 +34,9 @@ PARAMETER_RECORD_FIELDS = PARAMETER_RECORD_REQUIRED_FIELDS | PARAMETER_RECORD_OP
 SEED_FIELDS = {"name", "conn_source", "rationale", "confirmed_by_investigator"}
 SUBJECT_FIELDS = {"id", "functional", "structural"}
 DESIGN_FIELDS = {"type", "groups", "covariates", "contrasts"}
+HYPOTHESIS_FIELDS = {
+    "statement", "target_contrast", "expected_direction", "decision_rule", "sample_adequacy"
+}
 
 
 def validate_project(project: dict[str, Any], pipeline: ResolvedPipeline, *, check_paths: bool) -> ValidationResult:
@@ -78,10 +81,48 @@ def validate_project(project: dict[str, Any], pipeline: ResolvedPipeline, *, che
     _validate_dataset(project.get("dataset", {}), errors, warnings, check_paths)
     subjects = _validate_subjects(project.get("subjects"), errors, check_paths)
     _validate_design(project.get("design", {}), subjects, pipeline, errors, warnings)
+    _validate_hypothesis(project.get("hypothesis"), project.get("design", {}), errors)
     _validate_seeds(project.get("seeds"), pipeline, errors)
     _validate_parameters(project, pipeline, errors, warnings)
     errors.extend(validate_composition(project.get("composition"), pipeline))
     return ValidationResult(not errors, tuple(_unique(errors)), tuple(_unique(warnings)))
+
+
+def _validate_hypothesis(value: Any, design: Any, errors: list[str]) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        errors.append("hypothesis must be a mapping")
+        return
+    unknown = sorted(set(value) - HYPOTHESIS_FIELDS)
+    if unknown:
+        errors.append(f"hypothesis has unknown fields: {', '.join(unknown)}")
+    for field in ("statement", "target_contrast", "expected_direction", "decision_rule"):
+        if not value.get(field):
+            errors.append(f"hypothesis.{field} is required")
+    if value.get("expected_direction") not in {"positive", "negative", "nonzero"}:
+        errors.append("hypothesis.expected_direction must be positive, negative, or nonzero")
+    contrasts = design.get("contrasts", []) if isinstance(design, dict) else []
+    contrast_names = {
+        str(item.get("name")) for item in contrasts if isinstance(item, dict) and item.get("name")
+    }
+    if value.get("target_contrast") and str(value["target_contrast"]) not in contrast_names:
+        errors.append("hypothesis.target_contrast must name a design contrast")
+    rule = value.get("decision_rule")
+    if rule is not None:
+        if not isinstance(rule, dict):
+            errors.append("hypothesis.decision_rule must be a mapping")
+        else:
+            alpha = rule.get("alpha")
+            if not _is_number(alpha) or not 0 < float(alpha) <= 1:
+                errors.append("hypothesis.decision_rule.alpha must be greater than 0 and at most 1")
+            if not rule.get("multiplicity_method"):
+                errors.append("hypothesis.decision_rule.multiplicity_method is required")
+    adequacy = value.get("sample_adequacy")
+    if adequacy is not None and (
+        not isinstance(adequacy, dict) or not adequacy.get("basis")
+    ):
+        errors.append("hypothesis.sample_adequacy must document a basis")
 
 
 def _validate_dataset(dataset: Any, errors: list[str], warnings: list[str], check_paths: bool) -> None:

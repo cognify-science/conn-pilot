@@ -61,6 +61,7 @@
   },
   "quality_review": {
     "contract": "qc_review.v1.json",
+    "experiment_quality_contract": "experiment_quality_report.v1.json",
     "subject_decisions": ["accept", "exclude", "needs_review"],
     "exclusion_justification_required": true,
     "audit_identity": "Authenticated MCP subject",
@@ -69,6 +70,7 @@
     "separate_states": [
       "technical_completeness",
       "subject_quality",
+      "hypothesis_evidence",
       "scientific_acceptance"
     ],
     "portal": "An authenticated MCP user may mint a one-hour capability link scoped to one successful job",

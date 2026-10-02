@@ -22,6 +22,7 @@ def build_reproducibility_package(
     review: dict[str, Any],
     artifacts: list[dict[str, Any]],
     method_decisions: list[dict[str, Any]],
+    quality_report: dict[str, Any] | None = None,
     attachments: list[dict[str, Any]] | None = None,
 ) -> tuple[bytes, dict[str, Any]]:
     """Build a compact, machine-readable audit package without copying raw imaging data."""
@@ -43,6 +44,7 @@ def build_reproducibility_package(
             "spec": project["spec"],
         },
         "review": review,
+        "experiment_quality": quality_report,
         "method_decisions": method_decisions,
         "artifacts": [
             {key: value for key, value in artifact.items() if key != "object_key"}
@@ -71,6 +73,7 @@ def build_reproducibility_package(
         package.writestr("report.html", report_html)
         package.writestr("report.pdf", report_pdf)
         package.writestr("report.json", _json(report))
+        package.writestr("experiment-quality.json", _json(quality_report or {}))
         package.writestr("methods.md", methods)
         package.writestr("parameters.json", _json(project["spec"].get("parameters", {})))
         package.writestr("literature.json", _json(method_decisions))
@@ -94,7 +97,8 @@ def build_reproducibility_package(
         "included_subject_ids": review["sample"]["included_subject_ids"],
         "excluded_subject_ids": review["sample"]["excluded_subject_ids"],
         "files": [
-            "report.html", "report.pdf", "report.json", "methods.md", "parameters.json",
+            "report.html", "report.pdf", "report.json", "experiment-quality.json",
+            "methods.md", "parameters.json",
             "literature.json", "subject-decisions.csv", "dataset_description.json",
             "artifact-manifest.json",
             *[str(item["path"]) for item in attachments or []],
@@ -149,6 +153,9 @@ def _decisions_csv(subjects: list[dict[str, Any]]) -> str:
 def _report_html(report: dict[str, Any]) -> str:
     project = report["project"]["spec"].get("project", {})
     review = report["review"]
+    quality = report.get("experiment_quality") or {}
+    quality_state = quality.get("quality_assessment") or {}
+    hypothesis = quality.get("hypothesis_assessment") or {}
     rows = []
     for item in review["subject_quality"]["subjects"]:
         decision = item.get("decision") or {}
@@ -168,6 +175,11 @@ code{{white-space:pre-wrap}}.badge{{display:inline-block;padding:.25rem .5rem;ba
 <p>Result version: <code>{html.escape(str(report['job'].get('result_version')))}</code></p>
 <p>Sample version: <code>{html.escape(str(review['sample']['version']))}</code></p>
 <p>Second level: <span class=\"badge\">{html.escape(str(review['second_level']['status']))}</span></p>
+<h2>Calidad e hipótesis</h2>
+<p>Calidad para interpretar: <span class=\"badge\">{html.escape(str(quality_state.get('status', 'not_assessed')))}</span></p>
+<p>Afirmación confirmatoria permitida: <strong>{'sí' if quality_state.get('permits_confirmatory_claim') else 'no'}</strong></p>
+<p>Hipótesis: <span class=\"badge\">{html.escape(str(hypothesis.get('status', 'not_assessed')))}</span></p>
+<p>{html.escape(str(hypothesis.get('conclusion', 'No evaluada.')))}</p>
 <h2>Subject quality review</h2><table><thead><tr><th>Subject</th><th>Decision</th><th>Metrics</th></tr></thead>
 <tbody>{''.join(rows)}</tbody></table><h2>Audit record</h2>
 <p>This report binds technical completeness, subject decisions, the effective sample and the active second-level version.</p>
@@ -190,6 +202,9 @@ def _report_pdf(report: dict[str, Any]) -> bytes:
     )
     project = report["project"]["spec"].get("project", {})
     review = report["review"]
+    quality = report.get("experiment_quality") or {}
+    quality_state = quality.get("quality_assessment") or {}
+    hypothesis = quality.get("hypothesis_assessment") or {}
     story = [
         Paragraph(html.escape(str(project.get("name", "CONN Pilot report"))), styles["Title"]),
         Paragraph(html.escape(str(project.get("research_question", ""))), styles["BodyText"]),
@@ -199,6 +214,15 @@ def _report_pdf(report: dict[str, Any]) -> bytes:
             f"Result: <font name='Courier'>{html.escape(str(report['job'].get('result_version')))}</font><br/>"
             f"Sample: <font name='Courier'>{html.escape(str(review['sample']['version']))}</font><br/>"
             f"Second level: {html.escape(str(review['second_level']['status']))}",
+            styles["BodyText"],
+        ),
+        Spacer(1, 5 * mm),
+        Paragraph("Calidad e hipótesis", styles["Heading2"]),
+        Paragraph(
+            f"Calidad para interpretar: {html.escape(str(quality_state.get('status', 'not_assessed')))}<br/>"
+            f"Afirmación confirmatoria permitida: {'sí' if quality_state.get('permits_confirmatory_claim') else 'no'}<br/>"
+            f"Hipótesis: {html.escape(str(hypothesis.get('status', 'not_assessed')))}<br/>"
+            f"{html.escape(str(hypothesis.get('conclusion', 'No evaluada.')))}",
             styles["BodyText"],
         ),
         Spacer(1, 5 * mm),

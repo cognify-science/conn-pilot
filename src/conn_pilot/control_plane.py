@@ -38,6 +38,7 @@ from .io import nested_get
 from .literature import LiteratureEvidenceService
 from .parameter_resolver import ParameterResolver
 from .project import validate_project as validate_project_definition
+from .quality_report import build_experiment_quality_report
 from .reporting import build_reproducibility_package
 from .portal import review_portal_html
 from .seed_catalog import SeedCatalog
@@ -52,7 +53,7 @@ from .pipeline_graph import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTROL_RESPONSE_SCHEMA = "conn_pilot_control_response_v1"
 REMOTE_SPEC_FIELDS = {"project", "design", "seeds", "parameters"}
-REMOTE_SPEC_OPTIONAL_FIELDS = {"composition"}
+REMOTE_SPEC_OPTIONAL_FIELDS = {"composition", "hypothesis"}
 GUIDED_FLOW_ID = "rsfmri_seed_to_voxel_v1"
 LEGACY_GUIDED_FLOW_IDS = {"rsfmri_seed_to_voxel_one_sample_v1"}
 GUIDED_PIPELINE = ("rsfmri_seed_to_voxel", "1.0.0")
@@ -485,6 +486,7 @@ class ControlPlaneService:
                     "subject_level_quality_review",
                     "versioned_sample_recalculation",
                     "scientific_acceptance",
+                    "experiment_quality_and_hypothesis_report",
                     "reproducibility_export",
                 ],
                 "guided_flows": flows,
@@ -498,6 +500,7 @@ class ControlPlaneService:
                     "run_available_flow",
                     "get_job_status",
                     "get_subject_qc",
+                    "get_experiment_quality_report",
                     "set_subject_qc_decision",
                     "request_second_level_recalculation_if_sample_changed",
                     "record_scientific_decision",
@@ -519,6 +522,7 @@ class ControlPlaneService:
         groups: dict[str, list[str]] | None = None,
         covariates: dict[str, dict[str, float]] | None = None,
         contrasts: list[dict[str, Any]] | None = None,
+        hypothesis: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         normalized_flow_id = GUIDED_FLOW_ID if flow_id in LEGACY_GUIDED_FLOW_IDS else flow_id
         if normalized_flow_id not in GUIDED_FLOWS:
@@ -575,6 +579,7 @@ class ControlPlaneService:
         spec = _guided_flow_spec(
             project_name.strip(), research_question.strip(), design, selected_seeds,
             composition=composition_snapshot(pipeline),
+            hypothesis=_guided_hypothesis(hypothesis, design),
         )
         project = self.store.create_project(
             subject, dataset_id, pipeline_ref[0], pipeline_ref[1], spec
@@ -967,6 +972,15 @@ class ControlPlaneService:
             },
         )
 
+    def get_experiment_quality_report(self, subject: str, job_id: str) -> dict[str, Any]:
+        job = self._job(job_id, subject)
+        project = self._project(job["project_id"], subject)
+        review = self._review_state(subject, job)
+        return _response(
+            "get_experiment_quality_report",
+            {"report": build_experiment_quality_report(job=job, project=project, review=review)},
+        )
+
     def get_subject_qc_evidence(
         self, subject: str, job_id: str, subject_id: str | None = None
     ) -> dict[str, Any]:
@@ -1141,7 +1155,11 @@ class ControlPlaneService:
         )
         content, manifest = build_reproducibility_package(
             job=job, project=project, review=review, artifacts=artifacts,
-            method_decisions=decisions, attachments=attachments,
+            method_decisions=decisions,
+            quality_report=build_experiment_quality_report(
+                job=job, project=project, review=review
+            ),
+            attachments=attachments,
         )
         manifest["attachment_warnings"] = attachment_warnings
         digest = hashlib.sha256(content).hexdigest()
@@ -1646,6 +1664,8 @@ def materialize_remote_project(
     }
     if spec.get("composition") is not None:
         value["composition"] = spec["composition"]
+    if spec.get("hypothesis") is not None:
+        value["hypothesis"] = spec["hypothesis"]
     return value
 
 
@@ -1796,11 +1816,12 @@ def build_control_plane_server(
         groups: dict[str, list[str]] | None = None,
         covariates: dict[str, dict[str, float]] | None = None,
         contrasts: list[dict[str, Any]] | None = None,
+        hypothesis: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create a guided draft with chosen seeds, groups, covariates, and confirmed contrasts."""
         return service.start_available_flow(
             subject(), flow_id, dataset_id, project_name, research_question, seed_ids,
-            storage.available, design_type, groups, covariates, contrasts,
+            storage.available, design_type, groups, covariates, contrasts, hypothesis,
         )
 
     @server.tool(
@@ -1821,11 +1842,12 @@ def build_control_plane_server(
         groups: dict[str, list[str]] | None = None,
         covariates: dict[str, dict[str, float]] | None = None,
         contrasts: list[dict[str, Any]] | None = None,
+        hypothesis: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Compose an owned project from a validated modular template and scientific choices."""
         response = service.start_available_flow(
             subject(), flow_id, dataset_id, project_name, research_question, seed_ids,
-            storage.available, design_type, groups, covariates, contrasts,
+            storage.available, design_type, groups, covariates, contrasts, hypothesis,
         )
         response["operation"] = "compose_pipeline"
         return response
@@ -1918,6 +1940,11 @@ def build_control_plane_server(
     def get_qc_summary(job_id: str) -> dict[str, Any]:
         """Read separate technical, subject-quality, sample, second-level and scientific-review states."""
         return service.get_qc_summary(subject(), job_id)
+
+    @server.tool(annotations=read_only)
+    def get_experiment_quality_report(job_id: str) -> dict[str, Any]:
+        """Report whether quality permits inference and whether evidence supports the hypothesis."""
+        return service.get_experiment_quality_report(subject(), job_id)
 
     @server.tool(annotations=read_only)
     def get_subject_qc(job_id: str, subject_id: str | None = None) -> dict[str, Any]:
@@ -2344,6 +2371,9 @@ def build_control_plane_server(
         project = service._project(job["project_id"], owner)
         pipeline = service.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
         response["data"]["pipeline_graph"] = resolve_pipeline_graph(pipeline)
+        response["data"]["quality_report"] = service.get_experiment_quality_report(
+            owner, job_id
+        )["data"]["report"]
         evidence = service.get_subject_qc_evidence(owner, job_id)
         by_id = {item["subject_id"]: item for item in evidence["data"]["subjects"]}
         for item in response["data"]["review"]["subject_quality"]["subjects"]:
@@ -2468,6 +2498,7 @@ def _guided_flow_spec(
     design: dict[str, Any],
     seeds: list[dict[str, Any]],
     composition: dict[str, Any] | None = None,
+    hypothesis: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     def fixed(value: Any, rationale: str, *, confirmed: bool = True) -> dict[str, Any]:
         return {
@@ -2535,7 +2566,62 @@ def _guided_flow_spec(
     }
     if composition is not None:
         value["composition"] = composition
+    if hypothesis is not None:
+        value["hypothesis"] = hypothesis
     return value
+
+
+def _guided_hypothesis(
+    value: dict[str, Any] | None, design: dict[str, Any]
+) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("hypothesis must be an object")
+    normalized = {
+        "statement": value.get("statement"),
+        "target_contrast": value.get("target_contrast"),
+        "expected_direction": value.get("expected_direction"),
+        "decision_rule": value.get("decision_rule"),
+    }
+    if value.get("sample_adequacy") is not None:
+        normalized["sample_adequacy"] = value["sample_adequacy"]
+    errors: list[str] = []
+    _validate_hypothesis_for_guided_flow(normalized, design, errors)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return normalized
+
+
+def _validate_hypothesis_for_guided_flow(
+    value: dict[str, Any], design: dict[str, Any], errors: list[str]
+) -> None:
+    for field in ("statement", "target_contrast", "expected_direction", "decision_rule"):
+        if not value.get(field):
+            errors.append(f"hypothesis.{field} is required")
+    if value.get("expected_direction") not in {"positive", "negative", "nonzero"}:
+        errors.append("hypothesis.expected_direction must be positive, negative, or nonzero")
+    contrast_names = {
+        str(item.get("name"))
+        for item in design.get("contrasts", [])
+        if isinstance(item, dict) and item.get("name")
+    }
+    if value.get("target_contrast") and str(value["target_contrast"]) not in contrast_names:
+        errors.append("hypothesis.target_contrast must name a design contrast")
+    rule = value.get("decision_rule")
+    if not isinstance(rule, dict):
+        errors.append("hypothesis.decision_rule must be an object")
+    else:
+        alpha = rule.get("alpha")
+        if not isinstance(alpha, (int, float)) or isinstance(alpha, bool) or not 0 < float(alpha) <= 1:
+            errors.append("hypothesis.decision_rule.alpha must be greater than 0 and at most 1")
+        if not rule.get("multiplicity_method"):
+            errors.append("hypothesis.decision_rule.multiplicity_method is required")
+    adequacy = value.get("sample_adequacy")
+    if adequacy is not None and (
+        not isinstance(adequacy, dict) or not adequacy.get("basis")
+    ):
+        errors.append("hypothesis.sample_adequacy must document a basis")
 
 
 def _guided_design(

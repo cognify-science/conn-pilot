@@ -1,0 +1,50 @@
+{
+  "schema_version": "conn_pilot_experiment_quality_report_contract_v1",
+  "purpose": "Determine whether a result version is interpretable and whether its versioned evidence is compatible with the investigator's operationalized hypothesis.",
+  "separation_of_concerns": {
+    "technical_completeness": "Required execution stages and artifacts exist.",
+    "subject_quality": "Every subject has a current human QC decision.",
+    "sample_currency": "Second-level results correspond to the effective reviewed sample.",
+    "inferential_completeness": "Effect, uncertainty or test, and multiplicity handling are present and version-bound.",
+    "hypothesis_assessment": "Evidence is compared with an investigator-defined contrast, expected direction, and decision rule.",
+    "scientific_acceptance": "The investigator's versioned judgment remains separate from automated reporting."
+  },
+  "hypothesis_statuses": [
+    "not_evaluable_quality",
+    "not_evaluable_inference",
+    "inconclusive",
+    "evidence_compatible",
+    "evidence_not_compatible"
+  ],
+  "quality_gates": [
+    "technical_completeness",
+    "subject_quality_review",
+    "non_empty_effective_sample",
+    "current_second_level"
+  ],
+  "required_hypothesis_definition": [
+    "statement",
+    "target_contrast",
+    "expected_direction",
+    "decision_rule.alpha",
+    "decision_rule.multiplicity_method"
+  ],
+  "required_inferential_evidence": [
+    "contrast_name",
+    "effect_estimate",
+    "confidence_interval or p_value",
+    "multiplicity.method",
+    "result_version",
+    "sample_version"
+  ],
+  "language_policy": {
+    "technical_completion_implies_hypothesis_support": false,
+    "statistical_significance_implies_truth": false,
+    "preferred_supported_wording": "Evidence is compatible with the specified hypothesis; it does not prove the hypothesis true."
+  },
+  "surfaces": [
+    "get_experiment_quality_report",
+    "review portal",
+    "reproducibility package: experiment-quality.json, report.json, HTML and PDF"
+  ]
+}

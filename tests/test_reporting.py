@@ -37,6 +37,13 @@ class ReportingTests(unittest.TestCase):
             artifacts=[{"id": "a1", "object_key": "private/key", "sha256": "abc"}],
             method_decisions=[{"parameter_path": "denoising.bandpass", "selected_value": [0.01, 0.1],
                                "rationale": "Reviewed", "evidence_ids": ["pmid:1"]}],
+            quality_report={
+                "quality_assessment": {"status": "sufficient_for_interpretation"},
+                "hypothesis_assessment": {
+                    "status": "not_evaluable_inference",
+                    "conclusion": "Inferential evidence is missing.",
+                },
+            },
             attachments=[{"path": "qc/sub-001/a1-art.jpg", "content": b"image-bytes"}],
         )
         self.assertEqual(manifest["sample_version"], "sha256:sample")
@@ -44,6 +51,11 @@ class ReportingTests(unittest.TestCase):
             self.assertEqual(set(package.namelist()), set(manifest["files"]))
             report = json.loads(package.read("report.json"))
             self.assertEqual(report["review"]["sample"]["included_subject_ids"], ["sub-001"])
+            self.assertEqual(
+                report["experiment_quality"]["hypothesis_assessment"]["status"],
+                "not_evaluable_inference",
+            )
+            self.assertIn("experiment-quality.json", package.namelist())
             self.assertNotIn("object_key", report["artifacts"][0])
             self.assertIn("pmid:1", package.read("methods.md").decode())
             self.assertTrue(package.read("report.pdf").startswith(b"%PDF"))

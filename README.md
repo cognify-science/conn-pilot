@@ -144,6 +144,7 @@ guía de uso está en `docs/researcher-quickstart.md`.
 El MCP remoto expone operaciones para revisar y cerrar una versión de resultado:
 
 - `get_qc_summary`: muestra los tres estados independientes y la vigencia del segundo nivel.
+- `get_experiment_quality_report`: informa primero si la calidad y la versión de la muestra permiten interpretar el resultado; después clasifica la hipótesis como no evaluable, inconclusa, compatible o no compatible con la evidencia.
 - `get_subject_qc`: devuelve métricas ART y enlaces firmados de una hora para las imágenes de cada sujeto.
 - `set_subject_qc_decision`: registra `accept`, `exclude` o `needs_review`; toda exclusión exige justificación.
 - `record_scientific_decision`: registra `accept`, `reject` o `needs_review` para el análisis completo.
@@ -160,6 +161,14 @@ versión calculada con la muestra revisada. Cada ejecución nueva genera además
 QA visual nativo de CONN para normalización, registro, segmentación, ART y
 denoising, junto con tSNR, DVARS, volúmenes retenidos y rachas de outliers. El contrato está en
 `contracts/qc_review.v1.json`.
+
+El informe de calidad nunca convierte el éxito técnico, un valor p aislado ni la
+aceptación general del análisis en “hipótesis validada”. Para concluir sobre la
+hipótesis exige que el investigador la haya operacionalizado con un contraste,
+una dirección esperada y una regla de decisión; además exige evidencia inferencial
+versionada, incluida la estimación del efecto y el manejo de multiplicidad. Si falta
+algo, enumera el bloqueo en lugar de completar la conclusión por inferencia. El
+contrato detallado está en `contracts/experiment_quality_report.v1.json`.
 
 ### Asesor de literatura en el cliente
 
