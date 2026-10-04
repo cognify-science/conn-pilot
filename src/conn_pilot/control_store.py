@@ -208,17 +208,6 @@ class PostgresControlStore:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """,
-            """
-            CREATE TABLE IF NOT EXISTS cp_review_sessions (
-                id TEXT PRIMARY KEY,
-                token_hash TEXT NOT NULL UNIQUE,
-                job_id TEXT NOT NULL REFERENCES cp_jobs(id) ON DELETE CASCADE,
-                owner_subject TEXT NOT NULL REFERENCES cp_credentials(subject),
-                expires_at TIMESTAMPTZ NOT NULL,
-                revoked BOOLEAN NOT NULL DEFAULT FALSE,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
             "CREATE INDEX IF NOT EXISTS cp_jobs_queue_idx ON cp_jobs(state, created_at)",
             "CREATE INDEX IF NOT EXISTS cp_method_decisions_project_idx ON cp_method_decisions(project_id, created_at)",
             "CREATE INDEX IF NOT EXISTS cp_job_events_job_idx ON cp_job_events(job_id, id)",
@@ -348,42 +337,6 @@ class PostgresControlStore:
             },
             "dataset_counts": {str(row["status"]): int(row["count"]) for row in datasets},
         }
-
-    def create_review_session(
-        self, job_id: str, owner_subject: str, expires_seconds: int = 3600
-    ) -> dict[str, Any]:
-        raw_token = secrets.token_urlsafe(32)
-        session_id = uuid.uuid4().hex
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                INSERT INTO cp_review_sessions(id, token_hash, job_id, owner_subject, expires_at)
-                SELECT %s, %s, j.id, j.owner_subject,
-                       NOW() + (%s * INTERVAL '1 second')
-                FROM cp_jobs j
-                WHERE j.id=%s AND j.owner_subject=%s AND j.state='succeeded'
-                RETURNING id, job_id, owner_subject, expires_at::text AS expires_at,
-                          created_at::text AS created_at
-                """,
-                (session_id, token_digest(raw_token), expires_seconds, job_id, owner_subject),
-            ).fetchone()
-        if not row:
-            raise ValueError("Unknown successful job")
-        value = dict(row)
-        value["token"] = raw_token
-        return value
-
-    def resolve_review_session(self, token: str) -> dict[str, Any] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT id, job_id, owner_subject, expires_at::text AS expires_at
-                FROM cp_review_sessions
-                WHERE token_hash=%s AND revoked=FALSE AND expires_at > NOW()
-                """,
-                (token_digest(token),),
-            ).fetchone()
-        return dict(row) if row else None
 
     def get_dataset(self, dataset_id: str) -> dict[str, Any] | None:
         with self._connect() as connection:
@@ -824,14 +777,20 @@ class PostgresControlStore:
         self, run_id: str, worker_id: str, phase: str, lease_seconds: int
     ) -> bool:
         with self._connect() as connection:
-            row = connection.execute(
-                """
-                UPDATE cp_second_level_runs SET phase=%s,
-                    lease_expires_at=NOW() + (%s * INTERVAL '1 second'), updated_at=NOW()
-                WHERE id=%s AND worker_id=%s AND state='running' RETURNING id
-                """,
-                (phase, lease_seconds, run_id, worker_id),
-            ).fetchone()
+            with connection.transaction():
+                row = connection.execute(
+                    """
+                    UPDATE cp_second_level_runs SET phase=%s,
+                        lease_expires_at=NOW() + (%s * INTERVAL '1 second'), updated_at=NOW()
+                    WHERE id=%s AND worker_id=%s AND state='running' RETURNING id
+                    """,
+                    (phase, lease_seconds, run_id, worker_id),
+                ).fetchone()
+                if row:
+                    connection.execute(
+                        "UPDATE cp_workers SET last_seen_at=NOW() WHERE id=%s",
+                        (worker_id,),
+                    )
         return bool(row)
 
     def complete_second_level_run(
@@ -929,14 +888,20 @@ class PostgresControlStore:
 
     def heartbeat_job(self, job_id: str, worker_id: str, phase: str, lease_seconds: int) -> bool:
         with self._connect() as connection:
-            row = connection.execute(
-                """
-                UPDATE cp_jobs SET phase=%s, lease_expires_at=NOW() + (%s * INTERVAL '1 second'),
-                    updated_at=NOW()
-                WHERE id=%s AND worker_id=%s AND state='running' RETURNING id
-                """,
-                (phase, lease_seconds, job_id, worker_id),
-            ).fetchone()
+            with connection.transaction():
+                row = connection.execute(
+                    """
+                    UPDATE cp_jobs SET phase=%s, lease_expires_at=NOW() + (%s * INTERVAL '1 second'),
+                        updated_at=NOW()
+                    WHERE id=%s AND worker_id=%s AND state='running' RETURNING id
+                    """,
+                    (phase, lease_seconds, job_id, worker_id),
+                ).fetchone()
+                if row:
+                    connection.execute(
+                        "UPDATE cp_workers SET last_seen_at=NOW() WHERE id=%s",
+                        (worker_id,),
+                    )
         return bool(row)
 
     def complete_job(

@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from conn_pilot.adapter import generate_conn_batch  # noqa: E402
 from conn_pilot.catalog import Catalog  # noqa: E402
 from conn_pilot.errors import ExecutionError  # noqa: E402
+from conn_pilot.environment import _matlab_environment  # noqa: E402
 from conn_pilot.jobs import JobStore, verify_outputs  # noqa: E402
 from conn_pilot.project import execution_identifier, validate_project  # noqa: E402
 from conn_pilot.results import collect_artifacts  # noqa: E402
@@ -173,6 +174,35 @@ class EngineTests(unittest.TestCase):
         self.assertIn("art_regression_timeseries_*.mat", text)
         self.assertIn("qc_metrics.json", text)
         self.assertIn("atlas.Amygdala l", text)
+
+    def test_batch_can_enable_conn_subject_parallelization(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = generate_conn_batch(
+                self.project,
+                ROOT / "examples/project.template.yaml",
+                Path(directory),
+                {
+                    "parallel_jobs": 3,
+                    "parallel_profile": "Background process (Windows)",
+                },
+            )
+            text = target.read_text(encoding="utf-8")
+        self.assertIn("batch.parallel.N = 3;", text)
+        self.assertIn(
+            "batch.parallel.profile = 'Background process (Windows)';", text
+        )
+        self.assertIn("batch.parallel.immediatereturn = 0;", text)
+
+    def test_matlab_license_is_inherited_by_parallel_child_processes(self) -> None:
+        environment = _matlab_environment(
+            {"matlab": {"license_file": "C:/MATLAB/licenses/node.lic"}}
+        )
+        self.assertEqual(
+            environment["MLM_LICENSE_FILE"], "C:/MATLAB/licenses/node.lic"
+        )
+        self.assertEqual(
+            environment["LM_LICENSE_FILE"], "C:/MATLAB/licenses/node.lic"
+        )
 
     def test_two_group_design_with_covariate_is_rendered(self) -> None:
         project = copy.deepcopy(self.project)

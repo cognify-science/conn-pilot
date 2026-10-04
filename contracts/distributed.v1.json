@@ -73,7 +73,6 @@
       "hypothesis_evidence",
       "scientific_acceptance"
     ],
-    "portal": "An authenticated MCP user may mint a one-hour capability link scoped to one successful job",
     "reproducibility_package": "Server-generated ZIP with HTML, JSON, methods, parameters, evidence, decisions and artifact hashes"
   }
 }

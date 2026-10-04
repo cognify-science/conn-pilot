@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conn-pilot"
-version = "0.1.0"
+version = "0.1.0b1"
 description = "Local deterministic engine for validated CONN analyses"
 requires-python = ">=3.11"
 dependencies = [

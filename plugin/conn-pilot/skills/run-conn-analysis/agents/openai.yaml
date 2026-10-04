@@ -1,0 +1,13 @@
+interface:
+  display_name: "Run CONN analysis"
+  short_description: "Validate, submit and monitor a CONN Pilot job"
+  default_prompt: "Use $run-conn-analysis to validate, run and monitor my CONN Pilot project."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "conn-pilot"
+      description: "Authenticated CONN Pilot control plane"
+      transport: "streamable_http"
+      url: "https://control-plane-production-0adf.up.railway.app/mcp"
+policy:
+  allow_implicit_invocation: true

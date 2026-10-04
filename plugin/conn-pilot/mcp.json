@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "conn-pilot": {
+      "type": "streamable-http",
+      "url": "https://control-plane-production-0adf.up.railway.app/mcp"
+    }
+  }
+}

@@ -92,16 +92,6 @@ class FakeStore:
         return {"workers": [{"id": "worker-1", "online": True}], "job_counts": {},
                 "second_level_counts": {}, "dataset_counts": {"ready": 1}}
 
-    def create_review_session(
-        self, job_id: str, owner_subject: str, expires_seconds: int = 3600
-    ) -> dict[str, Any]:
-        return {"id": "review-1", "job_id": job_id, "owner_subject": owner_subject,
-                "expires_at": "2026-09-26T13:00:00Z", "token": "review-token"}
-
-    def resolve_review_session(self, token: str) -> dict[str, Any] | None:
-        return ({"id": "review-1", "job_id": "job-1", "owner_subject": "owner"}
-                if token == "review-token" else None)
-
     def get_dataset(self, dataset_id: str) -> dict[str, Any] | None:
         return self.datasets.get(dataset_id)
 
@@ -562,7 +552,6 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                 "list_pipelines",
                 "list_datasets",
                 "get_system_health",
-                "create_review_link",
                 "inspect_dataset",
                 "create_project",
                 "validate_project",
@@ -597,6 +586,45 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(datasets.structured_content["data"]["count"], 1)
         self.assertGreater(topics.structured_content["data"]["count"], 1)
         self.assertEqual(guidance.structured_content["data"]["returned_count"], 2)
+
+    def test_projects_jobs_and_results_are_isolated_by_auth0_subject(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(store, ROOT / "catalog")
+        project = store.create_project(
+            "auth0|researcher-a",
+            "study_001",
+            "rsfmri_seed_to_voxel",
+            "1.0.0",
+            remote_spec(),
+        )
+        job = store.create_job(project)
+        job.update(state="succeeded", result_version="sha256:isolated", result_summary={})
+
+        for operation in (
+            lambda: service.get_project_pipeline_graph("auth0|researcher-b", project["id"]),
+            lambda: service.get_job_status("auth0|researcher-b", job["id"]),
+            lambda: service.get_job_logs("auth0|researcher-b", job["id"]),
+            lambda: service.list_results("auth0|researcher-b", job["id"]),
+            lambda: service.get_qc_summary("auth0|researcher-b", job["id"]),
+        ):
+            with self.assertRaisesRegex(ValueError, "Unknown"):
+                operation()
+
+        self.assertTrue(service.get_job_status("auth0|researcher-a", job["id"])["ok"])
+
+    async def test_mcp_discovery_reports_beta_version(self) -> None:
+        settings = ControlSettings(
+            database_url="unused",
+            public_base_url="http://127.0.0.1:8000",
+            admin_subject="owner",
+            admin_token="x" * 48,
+            worker_token="y" * 48,
+            host="127.0.0.1",
+            port=8000,
+        )
+        server = build_control_plane_server(settings, FakeStore(), require_mcp_auth=False)
+        async with Client(server) as client:
+            self.assertEqual(client._session.server_info.version, "0.1.0-beta.1")
 
     def test_guided_product_flow_is_discoverable_and_stops_for_scientific_choices(self) -> None:
         store = FakeStore()

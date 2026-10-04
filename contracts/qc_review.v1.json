@@ -66,7 +66,6 @@
     "record_scientific_decision",
     "request_second_level_recalculation",
     "get_second_level_recalculation",
-    "generate_reproducibility_package",
-    "create_review_link"
+    "generate_reproducibility_package"
   ]
 }

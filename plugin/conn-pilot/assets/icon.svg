@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="CONN Pilot">
+  <rect width="128" height="128" rx="28" fill="#334155"/>
+  <circle cx="38" cy="42" r="12" fill="#38bdf8"/>
+  <circle cx="90" cy="42" r="12" fill="#a78bfa"/>
+  <circle cx="64" cy="88" r="12" fill="#34d399"/>
+  <path d="M48 47 59 76M80 47 69 76M50 42h28" fill="none" stroke="#f8fafc" stroke-width="7" stroke-linecap="round"/>
+</svg>

@@ -1,7 +1,7 @@
 id: rsfmri_roi_to_roi
 version: 1.0.0
 family: roi_to_roi
-status: validated_engine_probe
+status: validated_reference_run
 description: Resting-state ROI-to-ROI connectivity analysis for one sample or two
   independent groups.
 execution:
@@ -12,15 +12,18 @@ execution:
     first_level_artifact: connectivity_matrices
     second_level_artifact: roi_models
 validation:
-  date: '2026-09-27'
-  scope: Real first- and second-level ROI-to-ROI execution over the existing
-    three-subject sandbox derivatives; full remote raw-BIDS execution pending.
+  date: '2026-10-03'
+  scope: Integral remote raw-BIDS execution over the three-subject sandbox,
+    including preprocessing, denoising, first level, QC review, sample change,
+    second-level recalculation and reproducibility export.
   environment:
     matlab: R2023b
     spm: SPM25
     conn: 25.b
-  evidence: CONN created three subject connectivity matrices and ROI.mat for both
-    a one-sample model and a two-group contrast adjusted by a covariate.
+  evidence: Job 81a1c3c97f42452dbaabf67b7ca7cd4b created subject-level ROI-to-ROI
+    outputs, 21 QC images and ROI.mat; recalculation 967a4273024e4185a1fc1026ca70a95e
+    created a versioned second level for the reviewed two-subject sample. Tests
+    also cover a two-group contrast adjusted by a covariate.
 compatibility:
   matlab: R2023b
   spm: SPM25

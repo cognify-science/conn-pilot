@@ -1,0 +1,13 @@
+interface:
+  display_name: "Compare CONN methods"
+  short_description: "Compare cited parameter options and record a choice"
+  default_prompt: "Use $compare-conn-methods to compare evidence-backed parameter options for my CONN Pilot project."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "conn-pilot"
+      description: "Authenticated CONN Pilot control plane"
+      transport: "streamable_http"
+      url: "https://control-plane-production-0adf.up.railway.app/mcp"
+policy:
+  allow_implicit_invocation: true

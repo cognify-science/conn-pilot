@@ -67,8 +67,9 @@ python -m conn_pilot operation get_qc_summary JOB_ID
 El resumen de QC verifica completitud técnica e indexa la evidencia por sujeto.
 La ejecución de MATLAB exporta para cada sujeto la captura ART, cantidad y
 porcentaje de outliers, máximo de señal global y valores de movimiento. La
-revisión remota conserva por separado la completitud técnica, la calidad de
-cada sujeto y la aceptación científica del análisis.
+revisión se realiza desde el cliente MCP, con imágenes servidas mediante URLs
+firmadas temporales, y conserva por separado la completitud técnica, la calidad
+de cada sujeto y la aceptación científica del análisis.
 
 ## Servidor MCP local
 
@@ -151,7 +152,6 @@ El MCP remoto expone operaciones para revisar y cerrar una versión de resultado
 - `request_second_level_recalculation`: congela la muestra aceptada y encola solamente el segundo nivel.
 - `get_second_level_recalculation`: informa el estado y la versión del modelo grupal.
 - `generate_reproducibility_package`: genera un ZIP versionado con informe PDF/HTML/JSON, métodos, parámetros, literatura, decisiones, láminas QC, mapas vigentes y hashes.
-- `create_review_link`: crea un enlace interactivo de una hora para revisar el trabajo en `/review`.
 
 Cada decisión guarda la identidad autenticada, la fecha, `result_version` y,
 para la decisión científica, `sample_version`. El historial es append-only. Si

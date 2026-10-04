@@ -2,7 +2,7 @@ id: first_level_r2r
 version: 1.0.0
 kind: conn_batch
 category: first_level
-status: validated_engine_probe
+status: validated_reference_run
 requires: [denoised_data]
 provides: [first_level_r2r]
 project_inputs: [seeds]

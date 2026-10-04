@@ -1,0 +1,20 @@
+{
+  "name": "conn-pilot-private",
+  "interface": {
+    "displayName": "CONN Pilot Private Beta"
+  },
+  "plugins": [
+    {
+      "name": "conn-pilot",
+      "source": {
+        "source": "local",
+        "path": "./plugin/conn-pilot"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Research"
+    }
+  ]
+}

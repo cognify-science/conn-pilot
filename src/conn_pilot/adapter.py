@@ -8,15 +8,27 @@ from .analysis_contract import analysis_contract
 from .project import execution_identifier, safe_identifier
 
 
-def generate_conn_batch(project: dict[str, Any], project_path: Path, run_dir: Path) -> Path:
+def generate_conn_batch(
+    project: dict[str, Any],
+    project_path: Path,
+    run_dir: Path,
+    execution: dict[str, Any] | None = None,
+) -> Path:
     run_dir.mkdir(parents=True, exist_ok=True)
     project_name = execution_identifier(project["project"]["name"])
     batch_path = run_dir / f"{project_name}_conn_batch.m"
-    batch_path.write_text(_render_batch(project, project_path, run_dir), encoding="utf-8")
+    batch_path.write_text(
+        _render_batch(project, project_path, run_dir, execution), encoding="utf-8"
+    )
     return batch_path
 
 
-def _render_batch(project: dict[str, Any], project_path: Path, run_dir: Path) -> str:
+def _render_batch(
+    project: dict[str, Any],
+    project_path: Path,
+    run_dir: Path,
+    execution: dict[str, Any] | None = None,
+) -> str:
     parameters = project["parameters"]
     preprocessing = parameters["preprocessing"]
     denoising = parameters["denoising"]
@@ -25,6 +37,13 @@ def _render_batch(project: dict[str, Any], project_path: Path, run_dir: Path) ->
     seeds = project["seeds"]
     analysis = analysis_contract(project)
     project_name = execution_identifier(project["project"]["name"])
+    execution = execution or {}
+    parallel_jobs = int(execution.get("parallel_jobs", 0) or 0)
+    if parallel_jobs < 0:
+        raise ValueError("execution.parallel_jobs must be zero or greater")
+    parallel_profile = str(
+        execution.get("parallel_profile", "Background process (Windows)")
+    )
     lines = [
         "% Generated deterministically by CONN Pilot.",
         f"% Source project: {_comment(project_path.as_posix())}",
@@ -36,6 +55,16 @@ def _render_batch(project: dict[str, Any], project_path: Path, run_dir: Path) ->
         f"batch.Setup.RT = {_number(project['dataset']['tr_seconds'])};",
         "",
     ]
+    if parallel_jobs:
+        lines.extend(
+            [
+                "% Parallel subject-level execution configured by the worker.",
+                f"batch.parallel.N = {parallel_jobs};",
+                f"batch.parallel.profile = '{_matlab_string(parallel_profile)}';",
+                "batch.parallel.immediatereturn = 0;",
+                "",
+            ]
+        )
     for index, subject in enumerate(subjects, start=1):
         lines.extend(
             [

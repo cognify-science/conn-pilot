@@ -1,0 +1,13 @@
+interface:
+  display_name: "Review CONN results"
+  short_description: "Assess QC, sample versions and scientific acceptance"
+  default_prompt: "Use $review-conn-results to review subject quality and the scientific status of my latest result."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "conn-pilot"
+      description: "Authenticated CONN Pilot control plane"
+      transport: "streamable_http"
+      url: "https://control-plane-production-0adf.up.railway.app/mcp"
+policy:
+  allow_implicit_invocation: true

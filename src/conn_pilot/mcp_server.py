@@ -9,6 +9,7 @@ from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.types import ToolAnnotations
 
+from . import __version__
 from .operations import REQUEST_SCHEMA, OperationService
 
 
@@ -37,7 +38,9 @@ def build_mcp_server(
 ) -> MCPServer:
     """Expose the deterministic engine as nine MCP tools."""
     operation_service = service or build_operation_service()
-    server = MCPServer("CONN Pilot", token_verifier=token_verifier, auth=auth)
+    server = MCPServer(
+        "CONN Pilot", version=__version__, token_verifier=token_verifier, auth=auth
+    )
     read_only = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
     def invoke(operation: str, arguments: dict[str, Any]) -> dict[str, Any]:

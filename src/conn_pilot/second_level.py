@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .analysis_contract import analysis_contract
+from .environment import _matlab_environment, matlab_batch_command
 from .io import write_json
 from .project import execution_identifier
 
@@ -123,7 +124,7 @@ def run_second_level_recalculation(
         "w", encoding="utf-8"
     ) as stderr:
         completed = subprocess.run(
-            [str(matlab), "-batch", expression], stdout=stdout, stderr=stderr,
+            matlab_batch_command(matlab, environment, expression), stdout=stdout, stderr=stderr,
             text=True, env=_matlab_environment(environment),
         )
     if completed.returncode != 0:
@@ -179,7 +180,6 @@ def run_second_level_recalculation(
         "artifact_paths": [manifest_path, script_path, stdout_path, stderr_path, *result_files],
     }
 
-
 def _matlab(value: Any) -> str:
     return str(value).replace("\\", "/").replace("'", "''")
 
@@ -204,14 +204,3 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _matlab_environment(environment: dict[str, Any]) -> dict[str, str]:
-    import os
-
-    result = dict(os.environ)
-    preferences = environment.get("matlab", {}).get("preferences_dir")
-    if preferences:
-        Path(preferences).mkdir(parents=True, exist_ok=True)
-        result["MATLAB_PREFDIR"] = str(preferences)
-    return result

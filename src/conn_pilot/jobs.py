@@ -12,7 +12,7 @@ from typing import Any
 
 from .adapter import generate_conn_batch
 from .analysis_contract import analysis_contract
-from .environment import _matlab_environment
+from .environment import _matlab_environment, matlab_batch_command
 from .errors import ExecutionError
 from .io import sha256_file, write_json, write_yaml
 from .project import execution_identifier
@@ -164,7 +164,10 @@ def execute_queued_project(
         execution_project, staged_inputs = stage_project_inputs(project, run_dir)
         snapshot = run_dir / "project.execution.yaml"
         write_yaml(snapshot, execution_project)
-        batch_path = generate_conn_batch(execution_project, snapshot, run_dir)
+        execution_settings = environment.get("execution", {})
+        batch_path = generate_conn_batch(
+            execution_project, snapshot, run_dir, execution_settings
+        )
         store.update(job_id, "running", batch_path=str(batch_path))
         stdout_path = run_dir / "matlab_stdout.log"
         stderr_path = run_dir / "matlab_stderr.log"
@@ -175,7 +178,7 @@ def execute_queued_project(
         expression = f"addpath('{spm}'); addpath('{conn}'); run('{batch}');"
         with stdout_path.open("w", encoding="utf-8") as stdout, stderr_path.open("w", encoding="utf-8") as stderr:
             completed = subprocess.run(
-                [str(matlab), "-batch", expression],
+                matlab_batch_command(Path(matlab), environment, expression),
                 stdout=stdout,
                 stderr=stderr,
                 text=True,
@@ -274,6 +277,14 @@ def build_manifest(
             "matlab": environment["matlab"].get("release"),
             "spm": environment["spm"].get("version"),
             "conn": environment["conn"].get("version"),
+        },
+        "execution": {
+            "parallel_jobs": int(
+                environment.get("execution", {}).get("parallel_jobs", 0) or 0
+            ),
+            "parallel_profile": environment.get("execution", {}).get(
+                "parallel_profile"
+            ),
         },
         "inputs": {
             "request_project_yaml": {"path": str(request_snapshot), "sha256": sha256_file(request_snapshot)},

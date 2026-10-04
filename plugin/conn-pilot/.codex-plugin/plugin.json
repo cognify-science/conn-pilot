@@ -1,0 +1,41 @@
+{
+  "name": "conn-pilot",
+  "version": "0.1.0-beta.1",
+  "description": "Design, execute and review reproducible CONN analyses on the authenticated CONN Pilot sandbox.",
+  "author": {
+    "name": "CONN Pilot"
+  },
+  "homepage": "https://github.com/GuillermoPoblete/conn-pilot",
+  "repository": "https://github.com/GuillermoPoblete/conn-pilot",
+  "license": "Proprietary",
+  "keywords": [
+    "neuroimaging",
+    "connectivity",
+    "CONN",
+    "fMRI",
+    "reproducibility"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "CONN Pilot",
+    "shortDescription": "Run and review reproducible CONN analyses",
+    "longDescription": "Guide a researcher from a supported CONN experiment design through parameter evidence, remote execution, subject-level quality review, sample recalculation and a reproducibility package.",
+    "developerName": "CONN Pilot",
+    "category": "Research",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/GuillermoPoblete/conn-pilot",
+    "defaultPrompt": [
+      "Show me the CONN analyses available in the sandbox and help me design one.",
+      "Review the quality and scientific status of my latest CONN Pilot result."
+    ],
+    "brandColor": "#334155",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg",
+    "screenshots": []
+  }
+}

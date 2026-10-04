@@ -3,7 +3,7 @@
 ## Objetivo
 
 Comprobar que un investigador puede completar el análisis sandbox desde Codex,
-con el portal como apoyo visual opcional, sin terminal ni edición de YAML.
+sin portal, terminal ni edición de YAML.
 
 ## Participantes y duración
 
@@ -22,8 +22,8 @@ con el portal como apoyo visual opcional, sin terminal ni edición de YAML.
 6. Registrar la aceptación o rechazo científico de la versión vigente.
 7. Descargar el paquete reproducible y localizar el PDF, las decisiones, la
    evidencia, las imágenes QC y los mapas del segundo nivel.
-8. Repetir al menos una consulta solo desde Codex para verificar que el portal
-   es opcional.
+8. Descargar una imagen mediante su URL firmada y completar la revisión desde
+   Codex.
 
 ## Datos que se registran
 
@@ -48,7 +48,7 @@ al sandbox.
 
 ## Cierre de cada sesión
 
-El facilitador exporta el paquete reproducible, registra los incidentes con
-severidad y elimina el enlace temporal del portal al expirar. Los hallazgos se
+El facilitador exporta el paquete reproducible y registra los incidentes con
+severidad. Los hallazgos se
 clasifican en bloqueo, error científico, error de operación o mejora de uso. Un
 bloqueo o error científico detiene nuevas sesiones hasta su corrección.

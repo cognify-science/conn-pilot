@@ -30,8 +30,9 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 from pydantic import AnyHttpUrl
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse
+from starlette.responses import JSONResponse
 
+from . import __version__
 from .catalog import Catalog
 from .control_store import PostgresControlStore
 from .io import nested_get
@@ -40,7 +41,6 @@ from .parameter_resolver import ParameterResolver
 from .project import validate_project as validate_project_definition
 from .quality_report import build_experiment_quality_report
 from .reporting import build_reproducibility_package
-from .portal import review_portal_html
 from .seed_catalog import SeedCatalog
 from .pipeline_graph import (
     build_node_execution_plan,
@@ -76,10 +76,6 @@ class Store(Protocol):
     ) -> dict[str, Any] | None: ...
     def list_datasets(self) -> list[dict[str, Any]]: ...
     def get_system_health(self) -> dict[str, Any]: ...
-    def create_review_session(
-        self, job_id: str, owner_subject: str, expires_seconds: int = 3600
-    ) -> dict[str, Any]: ...
-    def resolve_review_session(self, token: str) -> dict[str, Any] | None: ...
     def get_dataset(self, dataset_id: str) -> dict[str, Any] | None: ...
     def create_project(
         self, owner_subject: str, dataset_id: str, pipeline_id: str, pipeline_version: str, spec: dict[str, Any]
@@ -474,7 +470,7 @@ class ControlPlaneService:
                 "product": "CONN Pilot",
                 "interaction_modes": {
                     "codex_mcp": "complete_workflow",
-                    "review_portal": "optional_visual_review",
+                    "signed_result_urls": "conversation_first_visual_review",
                 },
                 "capabilities": [
                     "literature_guided_parameter_selection",
@@ -766,18 +762,6 @@ class ControlPlaneService:
             ok=validation.valid,
             errors=list(validation.errors),
             warnings=list(validation.warnings),
-        )
-
-    def create_review_link(
-        self, subject: str, job_id: str, public_base_url: str
-    ) -> dict[str, Any]:
-        self._job(job_id, subject)
-        session = self.store.create_review_session(job_id, subject)
-        token = session.pop("token")
-        return _response(
-            "create_review_link",
-            {"job_id": job_id, "url": f"{public_base_url.rstrip('/')}/review/{token}",
-             "expires_at": session["expires_at"]},
         )
 
     def inspect_dataset(self, dataset_id: str) -> dict[str, Any]:
@@ -1746,6 +1730,7 @@ def build_control_plane_server(
     )
     server = MCPServer(
         "CONN Pilot",
+        version=__version__,
         instructions=(
             "When a researcher asks what the product can do or wants to run an available analysis, call "
             "get_product_capabilities first, then use start_available_flow and run_available_flow. "
@@ -1878,16 +1863,6 @@ def build_control_plane_server(
     def get_system_health() -> dict[str, Any]:
         """Show worker availability, storage readiness and execution queue counts."""
         return service.get_system_health(storage.available)
-
-    @server.tool(
-        annotations=ToolAnnotations(
-            read_only_hint=False, destructive_hint=False,
-            idempotent_hint=False, open_world_hint=False,
-        )
-    )
-    def create_review_link(job_id: str) -> dict[str, Any]:
-        """Create a one-hour interactive review portal link scoped to one successful job."""
-        return service.create_review_link(subject(), job_id, settings.public_base_url)
 
     @server.tool(annotations=read_only)
     def inspect_dataset(dataset_id: str) -> dict[str, Any]:
@@ -2337,124 +2312,6 @@ def build_control_plane_server(
         except (KeyError, TypeError, ValueError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         return JSONResponse({"ok": True, "artifact": artifact})
-
-    def portal_session(request: Request) -> dict[str, Any] | None:
-        return store.resolve_review_session(str(request.path_params.get("token", "")))
-
-    async def portal_body(request: Request) -> tuple[dict[str, Any] | None, JSONResponse | None]:
-        try:
-            value = await request.json()
-        except (json.JSONDecodeError, ValueError):
-            return None, JSONResponse({"error": "invalid_json"}, status_code=400)
-        return (value, None) if isinstance(value, dict) else (
-            None, JSONResponse({"error": "body_must_be_object"}, status_code=400)
-        )
-
-    @server.custom_route("/review/{token:str}", methods=["GET"])
-    async def review_portal(request: Request) -> HTMLResponse:
-        session = portal_session(request)
-        if not session:
-            return HTMLResponse("Review link is invalid or expired.", status_code=404)
-        return HTMLResponse(
-            review_portal_html(str(request.path_params["token"])),
-            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
-        )
-
-    @server.custom_route("/review-api/{token:str}", methods=["GET"])
-    async def review_api(request: Request) -> JSONResponse:
-        session = portal_session(request)
-        if not session:
-            return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
-        job_id, owner = str(session["job_id"]), str(session["owner_subject"])
-        response = service.get_qc_summary(owner, job_id)
-        job = service._job(job_id, owner)
-        project = service._project(job["project_id"], owner)
-        pipeline = service.catalog.resolve(project["pipeline_id"], project["pipeline_version"])
-        response["data"]["pipeline_graph"] = resolve_pipeline_graph(pipeline)
-        response["data"]["quality_report"] = service.get_experiment_quality_report(
-            owner, job_id
-        )["data"]["report"]
-        evidence = service.get_subject_qc_evidence(owner, job_id)
-        by_id = {item["subject_id"]: item for item in evidence["data"]["subjects"]}
-        for item in response["data"]["review"]["subject_quality"]["subjects"]:
-            item["art_images"] = by_id.get(item["subject_id"], {}).get("art_images", [])
-            for artifact in item["art_images"]:
-                artifact["download_url"] = storage.download_url(artifact["object_key"])
-        return JSONResponse(response, headers={"Cache-Control": "no-store"})
-
-    @server.custom_route("/review-api/{token:str}/decision", methods=["POST"])
-    async def review_decision(request: Request) -> JSONResponse:
-        session = portal_session(request)
-        if not session:
-            return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
-        body, error = await portal_body(request)
-        if error:
-            return error
-        assert body is not None
-        try:
-            response = service.set_subject_qc_decision(
-                str(session["owner_subject"]), str(session["job_id"]),
-                str(body.get("result_version", "")), str(body.get("subject_id", "")),
-                str(body.get("decision", "")), body.get("justification"),
-            )
-        except ValueError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-        return JSONResponse(response)
-
-    @server.custom_route("/review-api/{token:str}/recalculate", methods=["POST"])
-    async def review_recalculate(request: Request) -> JSONResponse:
-        session = portal_session(request)
-        if not session:
-            return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
-        body, error = await portal_body(request)
-        if error:
-            return error
-        assert body is not None
-        try:
-            response = service.request_second_level_recalculation(
-                str(session["owner_subject"]), str(session["job_id"]),
-                str(body.get("result_version", "")), str(body.get("sample_version", "")),
-            )
-        except ValueError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-        return JSONResponse(response)
-
-    @server.custom_route("/review-api/{token:str}/scientific", methods=["POST"])
-    async def review_scientific(request: Request) -> JSONResponse:
-        session = portal_session(request)
-        if not session:
-            return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
-        body, error = await portal_body(request)
-        if error:
-            return error
-        assert body is not None
-        try:
-            response = service.record_scientific_decision(
-                str(session["owner_subject"]), str(session["job_id"]),
-                str(body.get("result_version", "")), str(body.get("sample_version", "")),
-                str(body.get("decision", "")), str(body.get("rationale", "")),
-            )
-        except ValueError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-        return JSONResponse(response)
-
-    @server.custom_route("/review-api/{token:str}/package", methods=["POST"])
-    async def review_package(request: Request) -> JSONResponse:
-        session = portal_session(request)
-        if not session:
-            return JSONResponse({"error": "invalid_or_expired_review_link"}, status_code=404)
-        body, error = await portal_body(request)
-        if error:
-            return error
-        assert body is not None
-        try:
-            response = service.generate_reproducibility_package(
-                str(session["owner_subject"]), str(session["job_id"]),
-                str(body.get("result_version", "")), str(body.get("sample_version", "")), storage,
-            )
-        except ValueError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-        return JSONResponse(response)
 
     return server
 
