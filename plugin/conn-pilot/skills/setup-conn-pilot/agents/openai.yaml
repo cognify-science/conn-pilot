@@ -1,0 +1,13 @@
+interface:
+  display_name: "Set up CONN Pilot"
+  short_description: "Connect and verify researcher-scoped MCP access"
+  default_prompt: "Use $setup-conn-pilot to verify my CONN Pilot connection without creating or running a project."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "conn-pilot"
+      description: "Authenticated CONN Pilot control plane"
+      transport: "streamable_http"
+      url: "https://control-plane-production-0adf.up.railway.app/mcp"
+policy:
+  allow_implicit_invocation: true

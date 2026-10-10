@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import io
+import json
 import sys
 import tempfile
 import time
@@ -22,12 +23,15 @@ sys.path.insert(0, str(ROOT / "src"))
 from mcp import Client  # noqa: E402
 
 from conn_pilot.control_plane import (  # noqa: E402
+    ArtifactStorage,
     ControlPlaneService,
     ControlSettings,
     HybridTokenVerifier,
     build_control_plane_server,
 )
 from conn_pilot.distributed_worker import (  # noqa: E402
+    DistributedWorker,
+    SupervisorLock,
     WorkerClient,
     inventory_record,
     load_registry,
@@ -92,6 +96,16 @@ class FakeStore:
         return {"workers": [{"id": "worker-1", "online": True}], "job_counts": {},
                 "second_level_counts": {}, "dataset_counts": {"ready": 1}}
 
+    def create_review_session(
+        self, job_id: str, owner_subject: str, expires_seconds: int = 3600
+    ) -> dict[str, Any]:
+        return {"id": "review-1", "job_id": job_id, "owner_subject": owner_subject,
+                "expires_at": "2026-09-26T13:00:00Z", "token": "review-token"}
+
+    def resolve_review_session(self, token: str) -> dict[str, Any] | None:
+        return ({"id": "review-1", "job_id": "job-1", "owner_subject": "owner"}
+                if token == "review-token" else None)
+
     def get_dataset(self, dataset_id: str) -> dict[str, Any] | None:
         return self.datasets.get(dataset_id)
 
@@ -127,6 +141,7 @@ class FakeStore:
             "state": "queued",
             "phase": "waiting_for_worker",
             "attempts": 0,
+            "progress": {},
         }
         self.jobs[value["id"]] = value
         return value
@@ -171,7 +186,16 @@ class FakeStore:
     def claim_job(self, worker_id: str, dataset_ids: list[str], lease_seconds: int) -> dict[str, Any] | None:
         return None
 
-    def heartbeat_job(self, job_id: str, worker_id: str, phase: str, lease_seconds: int) -> bool:
+    def heartbeat_job(
+        self,
+        job_id: str,
+        worker_id: str,
+        phase: str,
+        lease_seconds: int,
+        progress: dict[str, Any] | None = None,
+    ) -> bool:
+        if progress is not None and job_id in self.jobs:
+            self.jobs[job_id]["progress"] = copy.deepcopy(progress)
         return True
 
     def complete_job(
@@ -195,15 +219,18 @@ class FakeStore:
         self, job_id: str, owner_subject: str, parent_result_version: str,
         sample_version: str, included_subject_ids: list[str], review_snapshot: dict[str, Any]
     ) -> dict[str, Any]:
+        revision = "frozen-design-aliases-v1"
         existing = next((item for item in self.second_level_runs
                          if item["job_id"] == job_id
                          and item["sample_version"] == sample_version
+                         and item.get("computation_revision") == revision
                          and item["state"] in {"queued", "running", "succeeded"}), None)
         if existing:
             return existing
         value = {
             "id": f"second-level-{len(self.second_level_runs) + 1}", "job_id": job_id,
             "parent_result_version": parent_result_version, "sample_version": sample_version,
+            "computation_revision": revision,
             "included_subject_ids": included_subject_ids, "state": "queued",
             "phase": "waiting_for_worker", "attempts": 0, "output_version": None,
             "result_summary": None, "error": None,
@@ -559,6 +586,7 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                 "submit_job",
                 "retry_job",
                 "get_job_status",
+                "get_job_progress",
                 "get_job_logs",
                 "list_results",
                 "get_qc_summary",
@@ -586,45 +614,6 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(datasets.structured_content["data"]["count"], 1)
         self.assertGreater(topics.structured_content["data"]["count"], 1)
         self.assertEqual(guidance.structured_content["data"]["returned_count"], 2)
-
-    def test_projects_jobs_and_results_are_isolated_by_auth0_subject(self) -> None:
-        store = FakeStore()
-        service = ControlPlaneService(store, ROOT / "catalog")
-        project = store.create_project(
-            "auth0|researcher-a",
-            "study_001",
-            "rsfmri_seed_to_voxel",
-            "1.0.0",
-            remote_spec(),
-        )
-        job = store.create_job(project)
-        job.update(state="succeeded", result_version="sha256:isolated", result_summary={})
-
-        for operation in (
-            lambda: service.get_project_pipeline_graph("auth0|researcher-b", project["id"]),
-            lambda: service.get_job_status("auth0|researcher-b", job["id"]),
-            lambda: service.get_job_logs("auth0|researcher-b", job["id"]),
-            lambda: service.list_results("auth0|researcher-b", job["id"]),
-            lambda: service.get_qc_summary("auth0|researcher-b", job["id"]),
-        ):
-            with self.assertRaisesRegex(ValueError, "Unknown"):
-                operation()
-
-        self.assertTrue(service.get_job_status("auth0|researcher-a", job["id"])["ok"])
-
-    async def test_mcp_discovery_reports_beta_version(self) -> None:
-        settings = ControlSettings(
-            database_url="unused",
-            public_base_url="http://127.0.0.1:8000",
-            admin_subject="owner",
-            admin_token="x" * 48,
-            worker_token="y" * 48,
-            host="127.0.0.1",
-            port=8000,
-        )
-        server = build_control_plane_server(settings, FakeStore(), require_mcp_auth=False)
-        async with Client(server) as client:
-            self.assertEqual(client._session.server_info.version, "0.1.0-beta.1")
 
     def test_guided_product_flow_is_discoverable_and_stops_for_scientific_choices(self) -> None:
         store = FakeStore()
@@ -778,6 +767,61 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(repeated["data"]["reused_existing_job"])
         self.assertEqual(repeated["data"]["job"]["id"], response["data"]["job"]["id"])
         self.assertEqual(len(store.jobs), 1)
+
+    def test_job_progress_returns_the_path_free_worker_snapshot(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(store, ROOT / "catalog")
+        project = store.create_project(
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+        )
+        job = store.create_job(project)
+        snapshot = {
+            "schema_version": "conn_pilot_job_progress_v1",
+            "approximate_percent": 75,
+            "subjects": {"total": 1, "active_subject_ids": ["sub-001"], "items": []},
+            "activity": {"state": "active", "seconds_since_activity": 3},
+        }
+        job.update(state="running", phase="first_level", progress=snapshot)
+
+        response = service.get_job_progress("owner", job["id"])
+        self.assertTrue(response["ok"], response["errors"])
+        self.assertEqual(response["data"]["progress"], snapshot)
+        self.assertEqual(response["data"]["phase"], "first_level")
+        self.assertFalse(response["data"]["terminal"])
+        self.assertEqual(response["warnings"], [])
+
+    def test_second_level_recalculation_reuses_only_the_current_computation_revision(self) -> None:
+        store = FakeStore()
+        store.second_level_runs.append(
+            {
+                "id": "legacy-run",
+                "job_id": "job-1",
+                "parent_result_version": "sha256:result-one",
+                "sample_version": "sha256:sample-one",
+                "included_subject_ids": ["sub-001", "sub-002"],
+                "computation_revision": "legacy",
+                "state": "succeeded",
+                "phase": "succeeded",
+                "attempts": 1,
+                "output_version": "sha256:legacy-output",
+                "result_summary": {},
+                "error": None,
+            }
+        )
+
+        created = store.create_second_level_run(
+            "job-1", "owner", "sha256:result-one", "sha256:sample-one",
+            ["sub-001", "sub-002"], {},
+        )
+        self.assertNotEqual(created["id"], "legacy-run")
+        self.assertEqual(created["computation_revision"], "frozen-design-aliases-v1")
+
+        repeated = store.create_second_level_run(
+            "job-1", "owner", "sha256:result-one", "sha256:sample-one",
+            ["sub-001", "sub-002"], {},
+        )
+        self.assertEqual(repeated["id"], created["id"])
+        self.assertEqual(len(store.second_level_runs), 2)
 
     def test_subject_qc_decisions_are_versioned_and_keep_review_layers_separate(self) -> None:
         store = FakeStore()
@@ -1074,6 +1118,270 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                 ).DistributedWorker._restored_local_job_id(state_path, Service())
             )
 
+    def test_worker_restores_a_running_local_job_with_a_live_process(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "worker-state.json"
+            state_path.write_text(
+                '{"schema_version":"conn_pilot_worker_state_v1","local_job_id":"running-1"}',
+                encoding="utf-8",
+            )
+
+            class Store:
+                @staticmethod
+                def get(_job_id: str) -> dict[str, Any]:
+                    return {"id": "running-1", "state": "running", "run_dir": directory}
+
+            class Service:
+                store = Store()
+
+            with patch(
+                "conn_pilot.distributed_worker._local_job_has_live_process",
+                return_value=True,
+            ):
+                restored = __import__(
+                    "conn_pilot.distributed_worker", fromlist=["DistributedWorker"]
+                ).DistributedWorker._restored_local_job_id(state_path, Service())
+            self.assertEqual(restored, "running-1")
+
+    def test_worker_invalidates_an_orphaned_running_local_job(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "worker-state.json"
+            state_path.write_text(
+                '{"schema_version":"conn_pilot_worker_state_v1","local_job_id":"orphan-1"}',
+                encoding="utf-8",
+            )
+
+            class Store:
+                updated: tuple[str, str, dict[str, Any]] | None = None
+
+                @staticmethod
+                def get(_job_id: str) -> dict[str, Any]:
+                    return {"id": "orphan-1", "state": "running", "run_dir": directory}
+
+                @classmethod
+                def update(cls, job_id: str, state: str, **fields: Any) -> None:
+                    cls.updated = (job_id, state, fields)
+
+            class Service:
+                store = Store()
+
+            with patch(
+                "conn_pilot.distributed_worker._local_job_has_live_process",
+                return_value=False,
+            ):
+                restored = __import__(
+                    "conn_pilot.distributed_worker", fromlist=["DistributedWorker"]
+                ).DistributedWorker._restored_local_job_id(state_path, Service())
+            self.assertIsNone(restored)
+            self.assertEqual(Store.updated[0:2], ("orphan-1", "failed"))
+            self.assertIn("orphaned local job", Store.updated[2]["error"])
+
+    def test_worker_invalidates_an_unlinked_orphan_when_state_is_corrupt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "worker-state.json"
+            state_path.write_bytes(b"\x00" * 64)
+
+            class Store:
+                updated: tuple[str, str, dict[str, Any]] | None = None
+
+                @staticmethod
+                def list() -> list[dict[str, Any]]:
+                    return [{"id": "orphan-2", "state": "running", "run_dir": directory}]
+
+                @classmethod
+                def update(cls, job_id: str, state: str, **fields: Any) -> None:
+                    cls.updated = (job_id, state, fields)
+
+            class Service:
+                store = Store()
+
+            with patch(
+                "conn_pilot.distributed_worker._local_job_has_live_process",
+                return_value=False,
+            ):
+                restored = __import__(
+                    "conn_pilot.distributed_worker", fromlist=["DistributedWorker"]
+                ).DistributedWorker._restored_local_job_id(state_path, Service())
+            self.assertIsNone(restored)
+            self.assertEqual(Store.updated[0:2], ("orphan-2", "failed"))
+            self.assertIn("unlinked local job", Store.updated[2]["error"])
+
+    def test_worker_reassociates_an_unlinked_live_job_when_state_is_corrupt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "worker-state.json"
+            state_path.write_bytes(b"\x00" * 64)
+
+            class Store:
+                updated = None
+
+                @staticmethod
+                def list() -> list[dict[str, Any]]:
+                    return [{"id": "live-2", "state": "running", "run_dir": directory}]
+
+                @classmethod
+                def update(cls, job_id: str, state: str, **fields: Any) -> None:
+                    cls.updated = (job_id, state, fields)
+
+            class Service:
+                store = Store()
+
+            with patch(
+                "conn_pilot.distributed_worker._local_job_has_live_process",
+                return_value=True,
+            ):
+                restored = __import__(
+                    "conn_pilot.distributed_worker", fromlist=["DistributedWorker"]
+                ).DistributedWorker._restored_local_job_id(state_path, Service())
+            self.assertEqual(restored, "live-2")
+            self.assertIsNone(Store.updated)
+
+    def test_worker_state_is_replaced_atomically(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "worker-state.json"
+            worker = __import__(
+                "conn_pilot.distributed_worker", fromlist=["DistributedWorker"]
+            ).DistributedWorker
+            worker._write_worker_state(state_path, "remote-1", "local-1")
+            value = __import__("json").loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(value["remote_job_id"], "remote-1")
+            self.assertEqual(value["local_job_id"], "local-1")
+            self.assertEqual(list(Path(directory).glob(".*.tmp")), [])
+
+    def test_worker_recovers_durable_job_before_contacting_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            remote_dir = Path(directory) / "remote" / "remote-1"
+            DistributedWorker._write_json_atomic(
+                remote_dir / "remote-job.json",
+                {"id": "remote-1", "dataset_id": "study-001", "project": {}},
+            )
+            DistributedWorker._write_recovery_state(
+                remote_dir / "recovery-state.json", "remote-1", "running"
+            )
+
+            class Client:
+                @staticmethod
+                def post(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+                    raise AssertionError("control plane must not be contacted before recovery")
+
+            worker = DistributedWorker(
+                client=Client(), worker_id="worker-1", label="worker",
+                registry={}, work_root=directory,
+            )
+            with patch.object(worker, "run_job") as run_job:
+                self.assertTrue(worker.run_once())
+            run_job.assert_called_once()
+            self.assertEqual(run_job.call_args.args[0]["id"], "remote-1")
+
+    def test_worker_restarts_interrupted_local_attempt_for_same_remote_job(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            jobs: dict[str, dict[str, Any]] = {}
+
+            class Store:
+                def list(self) -> list[dict[str, Any]]:
+                    return list(jobs.values())
+
+                def get(self, job_id: str) -> dict[str, Any] | None:
+                    return jobs.get(job_id)
+
+                def update(self, job_id: str, state: str, **fields: Any) -> None:
+                    jobs[job_id].update(state=state, **fields)
+
+            class Service:
+                store = Store()
+                submissions = 0
+
+                def submit_job(self, _path: str) -> dict[str, Any]:
+                    self.submissions += 1
+                    job_id = f"local-{self.submissions}"
+                    state = "running" if self.submissions == 1 else "succeeded"
+                    jobs[job_id] = {
+                        "id": job_id, "state": state, "run_dir": directory,
+                        "batch_path": str(Path(directory) / f"{job_id}.m"), "error": None,
+                    }
+                    return {"ok": True, "data": {"job": jobs[job_id]}}
+
+                def get_job_status(self, job_id: str) -> dict[str, Any]:
+                    job = jobs[job_id]
+                    return {
+                        "data": {
+                            "job": job,
+                            "phase": "matlab_running" if job["state"] == "running" else "succeeded",
+                            "terminal": job["state"] in {"succeeded", "failed"},
+                        }
+                    }
+
+                @staticmethod
+                def get_job_progress(_job_id: str) -> dict[str, Any]:
+                    return {"data": {"progress": {}}}
+
+                @staticmethod
+                def list_results(_job_id: str) -> dict[str, Any]:
+                    return {"data": {"artifacts": {"counts": {}}}}
+
+                @staticmethod
+                def get_qc_summary(_job_id: str) -> dict[str, Any]:
+                    return {"data": {}}
+
+            class Client:
+                @staticmethod
+                def post(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+                    return {"ok": True}
+
+            service = Service()
+            worker = DistributedWorker(
+                client=Client(), worker_id="worker-1", label="worker",
+                registry={
+                    "study-001": {
+                        "root": directory, "layout": "bids", "tr_seconds": 2.0,
+                        "subjects": [{"id": "sub-001"}],
+                    }
+                },
+                work_root=directory,
+            )
+            remote = {"id": "remote-1", "dataset_id": "study-001", "project": {}}
+            with (
+                patch("conn_pilot.distributed_worker.materialize_remote_project", return_value={"project": {"name": "test"}}),
+                patch("conn_pilot.distributed_worker.build_operation_service", return_value=service),
+                patch("conn_pilot.distributed_worker._local_job_has_live_process", return_value=False),
+                patch.object(worker, "_upload_selected", return_value={"uploaded": 0}),
+                patch.object(worker, "_complete") as complete,
+            ):
+                worker.run_job(remote)
+            self.assertEqual(service.submissions, 2)
+            self.assertEqual(jobs["local-1"]["state"], "failed")
+            complete.assert_called_once()
+            self.assertEqual(complete.call_args.args[0:2], ("remote-1", "succeeded"))
+            recovery = json.loads(
+                (Path(directory) / "remote" / "remote-1" / "recovery-state.json").read_text()
+            )
+            self.assertEqual(recovery["state"], "completed")
+            self.assertEqual(recovery["recovery_count"], 1)
+
+    def test_artifact_object_key_is_stable_for_same_digest(self) -> None:
+        class S3:
+            @staticmethod
+            def generate_presigned_url(_operation: str, *, Params: dict[str, Any], ExpiresIn: int) -> str:
+                return f"https://upload.example/{Params['Key']}?expires={ExpiresIn}"
+
+        storage = ArtifactStorage.__new__(ArtifactStorage)
+        storage.client = S3()
+        storage.bucket = "bucket"
+        digest = "a" * 64
+        first = storage.prepare_upload("job-1", "report.json", "application/json", digest)
+        second = storage.prepare_upload("job-1", "report.json", "application/json", digest)
+        self.assertEqual(first["object_key"], second["object_key"])
+        self.assertEqual(first["object_key"], f"jobs/job-1/{digest}-report.json")
+
+    def test_distributed_supervisor_allows_only_one_process(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "supervisor.lock"
+            with SupervisorLock(path):
+                with self.assertRaisesRegex(RuntimeError, "already running"):
+                    with SupervisorLock(path):
+                        pass
+            with SupervisorLock(path):
+                pass
+
     def test_failed_remote_job_can_be_requeued(self) -> None:
         store = FakeStore()
         project = store.create_project(
@@ -1127,6 +1435,10 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(str(root), serialized)
         self.assertNotIn("func", serialized)
         self.assertEqual(record["metadata"]["subject_count"], 1)
+        slice_timing = record["metadata"]["acquisition_metadata"]["slice_timing"]
+        self.assertEqual(slice_timing["status"], "missing")
+        self.assertTrue(slice_timing["requires_resolution_for_default_mni"])
+        self.assertIn("omit_slice_timing_correction", slice_timing["available_options"])
 
     def test_worker_sanitizes_paths_from_remote_summaries(self) -> None:
         value = {

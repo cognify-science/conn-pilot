@@ -85,11 +85,14 @@ def _render_batch(
         ]
     )
     lines.extend(_render_effects(subjects, design))
+    preflight = project.get("execution_preflight", {})
+    slice_timing = preflight.get("checks", {}).get("slice_timing", {})
+    slice_action = slice_timing.get("decision", {}).get("action")
+    preprocessing_lines = _render_preprocessing_steps(preprocessing, slice_action)
     lines.extend(
         [
             "",
-            f"batch.Setup.preprocessing.steps = '{_matlab_string(_value(preprocessing, 'pipeline'))}';",
-            "batch.Setup.preprocessing.sliceorder = 'BIDS';",
+            *preprocessing_lines,
             f"batch.Setup.preprocessing.fwhm = {_number(_value(preprocessing, 'smoothing_fwhm_mm'))};",
             "batch.Setup.preprocessing.art_thresholds = "
             f"[{_number(_value(preprocessing, 'global_signal_z_threshold'))} "
@@ -125,6 +128,47 @@ def _render_batch(
     lines.extend(_render_results(design["contrasts"], seeds, analysis["conn_name"]))
     lines.append("")
     return "\n".join(lines)
+
+
+def _render_preprocessing_steps(
+    preprocessing: dict[str, Any], slice_timing_action: str | None
+) -> list[str]:
+    pipeline = str(_value(preprocessing, "pipeline"))
+    if slice_timing_action == "omit_slice_timing_correction":
+        if pipeline != "default_mni":
+            raise ValueError(
+                "Slice-timing omission is only implemented for the default_mni pipeline"
+            )
+        steps = [
+            "functional_label_as_original",
+            "structural_label_as_original",
+            "functional_centerruns",
+            "structural_center",
+            "functional_realign&unwarp",
+            "functional_label_as_realigned",
+            "functional_art",
+            "functional_label_as_minprep",
+            "functional_coregister_affine_reslice",
+            "functional_label_as_subjectspace",
+            "structural_label_as_subjectspace",
+            "functional_load_from_minprep",
+            "functional_segment&normalize_direct",
+            "functional_label_as_mnispace",
+            "structural_segment&normalize",
+            "structural_label_as_mnispace",
+            "functional_smooth",
+            "functional_label_as_smoothed",
+        ]
+        return [
+            "% Preflight decision: slice-timing correction omitted because exact BIDS metadata is unavailable.",
+            f"batch.Setup.preprocessing.steps = {_cell(steps)};",
+        ]
+    if slice_timing_action not in {None, "apply_bids_slice_timing"}:
+        raise ValueError(f"Unsupported slice-timing preflight action: {slice_timing_action}")
+    return [
+        f"batch.Setup.preprocessing.steps = '{_matlab_string(pipeline)}';",
+        "batch.Setup.preprocessing.sliceorder = 'BIDS';",
+    ]
 
 
 def _render_effects(subjects: list[dict[str, Any]], design: dict[str, Any]) -> list[str]:

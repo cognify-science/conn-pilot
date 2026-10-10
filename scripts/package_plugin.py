@@ -25,7 +25,7 @@ def package(output: Path) -> str:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Create the private CONN Pilot plugin ZIP")
+    parser = argparse.ArgumentParser(description="Create the CONN Pilot research-preview plugin ZIP")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
     digest = package(args.output.resolve())

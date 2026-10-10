@@ -24,6 +24,24 @@
     "expiration": "Makes a running job eligible for a later claim",
     "offline_behavior": "Local MATLAB execution continues; the worker retries control-plane synchronization with bounded exponential backoff"
   },
+  "job_progress": {
+    "schema_version": "conn_pilot_job_progress_v1",
+    "transport": "Included in authenticated worker job heartbeats and persisted by the control plane",
+    "mcp_operation": "get_job_progress",
+    "fields": [
+      "approximate_percent",
+      "stages",
+      "subjects.total",
+      "subjects.active_subject_ids",
+      "subjects.items",
+      "activity",
+      "reported_at"
+    ],
+    "percentage_basis": "Equal-weight durable artifact milestones across preprocessing, denoising, first level and second level",
+    "eta_policy": "Null until a calibrated runtime model is available",
+    "privacy": "No local paths, source images, process command lines or database internals are transmitted",
+    "scientific_boundary": "Execution progress never implies subject QC, exclusion or scientific acceptance"
+  },
   "data_boundary": {
     "railway": ["sanitized dataset metadata", "projects", "jobs", "events", "selected result artifacts", "versioned literature evidence", "method decisions and evidence snapshots"],
     "worker": ["dataset paths", "source neuroimages", "writable execution copies", "large derivatives"]
@@ -73,6 +91,7 @@
       "hypothesis_evidence",
       "scientific_acceptance"
     ],
+    "portal": "An authenticated MCP user may mint a one-hour capability link scoped to one successful job",
     "reproducibility_package": "Server-generated ZIP with HTML, JSON, methods, parameters, evidence, decisions and artifact hashes"
   }
 }

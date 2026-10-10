@@ -3,7 +3,17 @@
   "mcpServers": {
     "conn-pilot": {
       "type": "streamable-http",
-      "url": "https://control-plane-production-0adf.up.railway.app/mcp"
+      "url": "https://control-plane-production-0adf.up.railway.app/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": {
+              "mode": "dcr"
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -16,6 +16,8 @@ from .io import load_yaml, nested_get
 from .jobs import JobStore, queue_project
 from .project import ValidationResult, validate_project as validate_project_definition
 from .pipeline_graph import build_node_execution_plan
+from .preflight import build_execution_preflight
+from .progress import build_job_progress
 
 
 REQUEST_SCHEMA = "conn_pilot_operation_request_v1"
@@ -27,6 +29,7 @@ OPERATION_NAMES = (
     "generate_execution_plan",
     "submit_job",
     "get_job_status",
+    "get_job_progress",
     "get_job_logs",
     "list_results",
     "get_qc_summary",
@@ -178,10 +181,19 @@ class OperationService:
         validation = validate_project_definition(project, pipeline, check_paths=True)
         inspection = self.inspect_dataset(str(project_file))
         environment = self._environment_status()
+        execution_preflight = build_execution_preflight(
+            project, load_yaml(self.environment_path).get("execution", {})
+        )
         errors = list(validation.errors) + list(inspection["errors"])
         warnings = list(validation.warnings) + list(inspection["warnings"])
         if not environment["valid"]:
             errors.append("Local MATLAB/SPM/CONN environment is invalid")
+        if not execution_preflight["ready"]:
+            decision = execution_preflight["checks"]["slice_timing"]["decision"]
+            errors.append(
+                "Execution preflight requires parameter resolution: "
+                + str(decision.get("reason", "unresolved execution requirement"))
+            )
         parameters: list[dict[str, Any]] = []
         for path, specification in pipeline.definition["project_contract"].get("parameters", {}).items():
             record = nested_get(project.get("parameters", {}), path, {})
@@ -231,6 +243,7 @@ class OperationService:
                     "ready",
                 )
             },
+            "execution_preflight": execution_preflight,
             "stages": stages,
             "node_execution_plan": build_node_execution_plan(project, pipeline),
             "parameters": parameters,
@@ -264,6 +277,20 @@ class OperationService:
             return _response(
                 "submit_job", {}, ok=False, errors=["Local MATLAB/SPM/CONN environment is invalid"]
             )
+        execution_preflight = build_execution_preflight(
+            project, load_yaml(self.environment_path).get("execution", {})
+        )
+        if not execution_preflight["ready"]:
+            decision = execution_preflight["checks"]["slice_timing"]["decision"]
+            return _response(
+                "submit_job",
+                {"execution_preflight": execution_preflight},
+                ok=False,
+                errors=[
+                    "Execution preflight requires parameter resolution: "
+                    + str(decision.get("reason", "unresolved execution requirement"))
+                ],
+            )
         job = queue_project(project, project_file, self.store, self.run_root)
         try:
             worker_pid = self.worker_launcher(
@@ -283,6 +310,32 @@ class OperationService:
         job = self._job(job_id)
         data = {"job": job, "phase": _infer_phase(job), "terminal": job["state"] in {"succeeded", "failed"}}
         return _response("get_job_status", data, ok=job["state"] != "failed", errors=[job["error"]] if job["error"] else [])
+
+    def get_job_progress(self, job_id: str) -> dict[str, Any]:
+        job = self._job(job_id)
+        run_dir = Path(job["run_dir"])
+        project_path = run_dir / "project.execution.yaml"
+        if not project_path.is_file():
+            project_path = run_dir / "project.request.yaml"
+        if not project_path.is_file():
+            return _response(
+                "get_job_progress",
+                {
+                    "job_id": job_id,
+                    "state": job["state"],
+                    "phase": _infer_phase(job),
+                    "progress": None,
+                },
+                warnings=["The immutable project snapshot is not available yet"],
+            )
+        project = load_yaml(project_path)
+        progress = build_job_progress(job, project, phase=_infer_phase(job))
+        warnings = []
+        if progress["activity"]["state"] == "stale" and job["state"] == "running":
+            warnings.append(
+                "No output activity has been observed for more than 30 minutes; inspect logs before deciding whether the job is stalled."
+            )
+        return _response("get_job_progress", {"job_id": job_id, "progress": progress}, warnings=warnings)
 
     def get_job_logs(self, job_id: str, stream: str = "all", tail: int = 200) -> dict[str, Any]:
         if stream not in {"all", "stdout", "stderr", "worker"}:

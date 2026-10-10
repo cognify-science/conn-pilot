@@ -40,7 +40,7 @@ El investigador puede consultar las plantillas y módulos mediante
 `get_pipeline_builder_capabilities`, crear una de ellas con
 `compose_pipeline` (manteniendo `start_available_flow` por compatibilidad), inspeccionar el grafo resuelto con
 `get_project_pipeline_graph` y anticipar el efecto de cambios mediante
-`preview_pipeline_change`. Codex muestra el grafo ejecutado junto con QC y
+`preview_pipeline_change`. El portal muestra el grafo ejecutado junto con QC y
 decisiones científicas.
 
 ## Límites deliberados

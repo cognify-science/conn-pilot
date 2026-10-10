@@ -18,6 +18,7 @@ except ImportError:  # Allows contract tests before production dependencies are 
 
 
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
+SECOND_LEVEL_COMPUTATION_REVISION = "frozen-design-aliases-v1"
 
 
 def token_digest(token: str) -> str:
@@ -124,6 +125,7 @@ class PostgresControlStore:
                 attempts INTEGER NOT NULL DEFAULT 0,
                 result_version TEXT,
                 result_summary JSONB,
+                progress JSONB NOT NULL DEFAULT '{}'::jsonb,
                 error TEXT,
                 started_at TIMESTAMPTZ,
                 finished_at TIMESTAMPTZ,
@@ -132,6 +134,7 @@ class PostgresControlStore:
             )
             """,
             "ALTER TABLE cp_jobs ADD COLUMN IF NOT EXISTS result_version TEXT",
+            "ALTER TABLE cp_jobs ADD COLUMN IF NOT EXISTS progress JSONB NOT NULL DEFAULT '{}'::jsonb",
             "UPDATE cp_jobs SET result_version='legacy:' || id WHERE state='succeeded' AND result_version IS NULL",
             """
             CREATE TABLE IF NOT EXISTS cp_job_events (
@@ -194,6 +197,7 @@ class PostgresControlStore:
                 sample_version TEXT NOT NULL,
                 included_subject_ids JSONB NOT NULL,
                 review_snapshot JSONB NOT NULL,
+                computation_revision TEXT NOT NULL DEFAULT 'legacy',
                 state TEXT NOT NULL DEFAULT 'queued',
                 phase TEXT NOT NULL DEFAULT 'waiting_for_worker',
                 worker_id TEXT REFERENCES cp_workers(id),
@@ -208,6 +212,7 @@ class PostgresControlStore:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """,
+            "ALTER TABLE cp_second_level_runs ADD COLUMN IF NOT EXISTS computation_revision TEXT NOT NULL DEFAULT 'legacy'",
             "CREATE INDEX IF NOT EXISTS cp_jobs_queue_idx ON cp_jobs(state, created_at)",
             "CREATE INDEX IF NOT EXISTS cp_method_decisions_project_idx ON cp_method_decisions(project_id, created_at)",
             "CREATE INDEX IF NOT EXISTS cp_job_events_job_idx ON cp_job_events(job_id, id)",
@@ -548,7 +553,7 @@ class PostgresControlStore:
         query = """
             SELECT id, owner_subject, project_id, dataset_id, state, phase, worker_id,
                    lease_expires_at::text AS lease_expires_at, attempts, result_version,
-                   result_summary, error,
+                   result_summary, progress, error,
                    started_at::text AS started_at, finished_at::text AS finished_at,
                    created_at::text AS created_at, updated_at::text AS updated_at
             FROM cp_jobs WHERE id=%s
@@ -569,7 +574,7 @@ class PostgresControlStore:
                 """
                 SELECT j.id, j.owner_subject, j.project_id, j.dataset_id, j.state, j.phase,
                        j.worker_id, j.lease_expires_at::text AS lease_expires_at,
-                       j.attempts, j.result_version, j.result_summary, j.error,
+                       j.attempts, j.result_version, j.result_summary, j.progress, j.error,
                        j.started_at::text AS started_at, j.finished_at::text AS finished_at,
                        j.created_at::text AS created_at, j.updated_at::text AS updated_at
                 FROM cp_jobs j
@@ -591,7 +596,7 @@ class PostgresControlStore:
                     """
                     UPDATE cp_jobs SET state='queued', phase='waiting_for_worker', worker_id=NULL,
                         lease_expires_at=NULL, result_version=NULL, result_summary=NULL,
-                        error=NULL, finished_at=NULL,
+                        progress='{}'::jsonb, error=NULL, finished_at=NULL,
                         updated_at=NOW()
                     WHERE id=%s AND owner_subject=%s AND state='failed'
                     RETURNING id, owner_subject, project_id, dataset_id, state, phase, attempts,
@@ -660,14 +665,17 @@ class PostgresControlStore:
                 existing = connection.execute(
                     """
                     SELECT id, job_id, parent_result_version, sample_version, included_subject_ids,
+                           computation_revision,
                            state, phase, attempts, output_version, result_summary, error,
                            created_at::text AS created_at, updated_at::text AS updated_at
                     FROM cp_second_level_runs
                     WHERE job_id=%s AND parent_result_version=%s AND sample_version=%s
+                      AND computation_revision=%s
                       AND state IN ('queued','running','succeeded')
                     ORDER BY created_at DESC LIMIT 1
                     """,
-                    (job_id, parent_result_version, sample_version),
+                    (job_id, parent_result_version, sample_version,
+                     SECOND_LEVEL_COMPUTATION_REVISION),
                 ).fetchone()
                 if existing:
                     return dict(existing)
@@ -675,15 +683,17 @@ class PostgresControlStore:
                     """
                     INSERT INTO cp_second_level_runs(
                         id, job_id, owner_subject, parent_result_version, sample_version,
-                        included_subject_ids, review_snapshot
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s)
+                        included_subject_ids, review_snapshot, computation_revision
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
                     RETURNING id, job_id, parent_result_version, sample_version, included_subject_ids,
+                              computation_revision,
                               state, phase, attempts, output_version, result_summary, error,
                               created_at::text AS created_at, updated_at::text AS updated_at
                     """,
                     (
                         run_id, job_id, owner_subject, parent_result_version, sample_version,
                         Jsonb(included_subject_ids), Jsonb(review_snapshot),
+                        SECOND_LEVEL_COMPUTATION_REVISION,
                     ),
                 ).fetchone()
                 connection.execute(
@@ -691,7 +701,9 @@ class PostgresControlStore:
                     INSERT INTO cp_job_events(job_id, kind, message, details)
                     VALUES (%s, 'second_level_queued', 'Second-level recalculation queued', %s)
                     """,
-                    (job_id, Jsonb({"second_level_run_id": run_id, "sample_version": sample_version})),
+                    (job_id, Jsonb({"second_level_run_id": run_id,
+                                    "sample_version": sample_version,
+                                    "computation_revision": SECOND_LEVEL_COMPUTATION_REVISION})),
                 )
         return dict(row)
 
@@ -702,7 +714,8 @@ class PostgresControlStore:
             rows = connection.execute(
                 """
                 SELECT r.id, r.job_id, r.parent_result_version, r.sample_version,
-                       r.included_subject_ids, r.state, r.phase, r.attempts, r.output_version,
+                       r.included_subject_ids, r.computation_revision,
+                       r.state, r.phase, r.attempts, r.output_version,
                        r.result_summary, r.error, r.created_at::text AS created_at,
                        r.updated_at::text AS updated_at, r.finished_at::text AS finished_at
                 FROM cp_second_level_runs r JOIN cp_jobs j ON j.id=r.job_id
@@ -718,7 +731,8 @@ class PostgresControlStore:
     ) -> dict[str, Any] | None:
         query = """
             SELECT r.id, r.job_id, r.owner_subject, r.parent_result_version, r.sample_version,
-                   r.included_subject_ids, r.review_snapshot, r.state, r.phase, r.worker_id,
+                   r.included_subject_ids, r.review_snapshot, r.computation_revision,
+                   r.state, r.phase, r.worker_id,
                    r.attempts, r.output_version, r.result_summary, r.error,
                    r.created_at::text AS created_at, r.updated_at::text AS updated_at,
                    r.finished_at::text AS finished_at
@@ -758,7 +772,8 @@ class PostgresControlStore:
                         started_at=COALESCE(started_at,NOW()), updated_at=NOW(), error=NULL
                     WHERE id=%s
                     RETURNING id, job_id, parent_result_version, sample_version,
-                              included_subject_ids, review_snapshot, state, phase, attempts
+                              included_subject_ids, review_snapshot, computation_revision,
+                              state, phase, attempts
                     """,
                     (worker_id, lease_seconds, selected["id"]),
                 ).fetchone()
@@ -836,6 +851,17 @@ class PostgresControlStore:
                          Jsonb({"second_level_run_id": run_id,
                                 "output_version": output_version, "error": error})),
                     )
+                else:
+                    current = connection.execute(
+                        "SELECT state, worker_id FROM cp_second_level_runs WHERE id=%s",
+                        (run_id,),
+                    ).fetchone()
+                    if (
+                        current
+                        and current["state"] == state
+                        and current["worker_id"] == worker_id
+                    ):
+                        return True
         return bool(row)
 
     def claim_job(self, worker_id: str, dataset_ids: list[str], lease_seconds: int) -> dict[str, Any] | None:
@@ -845,35 +871,53 @@ class PostgresControlStore:
             with connection.transaction():
                 row = connection.execute(
                     """
-                    SELECT j.id
+                    SELECT j.id, j.state, j.phase, j.worker_id
                     FROM cp_jobs j
-                    WHERE (j.state='queued' OR (j.state='running' AND j.lease_expires_at < NOW()))
+                    WHERE (
+                            (j.state='running' AND j.worker_id=%s)
+                            OR j.state='queued'
+                            OR (j.state='running' AND j.lease_expires_at < NOW())
+                          )
                       AND j.dataset_id = ANY(%s)
-                    ORDER BY j.created_at
+                    ORDER BY
+                        CASE WHEN j.state='running' AND j.worker_id=%s THEN 0 ELSE 1 END,
+                        j.created_at
                     FOR UPDATE SKIP LOCKED LIMIT 1
                     """,
-                    (dataset_ids,),
+                    (worker_id, dataset_ids, worker_id),
                 ).fetchone()
                 if not row:
                     return None
                 job_id = row["id"]
+                resumed = row["state"] == "running" and row["worker_id"] == worker_id
                 job = connection.execute(
                     """
-                    UPDATE cp_jobs SET state='running', phase='claimed', worker_id=%s,
-                        lease_expires_at=NOW() + (%s * INTERVAL '1 second'), attempts=attempts+1,
+                    UPDATE cp_jobs SET state='running', phase=%s, worker_id=%s,
+                        lease_expires_at=NOW() + (%s * INTERVAL '1 second'), attempts=attempts+%s,
                         started_at=COALESCE(started_at, NOW()), updated_at=NOW(), error=NULL
                     WHERE id=%s
                     RETURNING id, owner_subject, project_id, dataset_id, state, phase, worker_id,
                               lease_expires_at::text AS lease_expires_at, attempts
                     """,
-                    (worker_id, lease_seconds, job_id),
+                    (
+                        row["phase"] if resumed else "claimed",
+                        worker_id,
+                        lease_seconds,
+                        0 if resumed else 1,
+                        job_id,
+                    ),
                 ).fetchone()
                 connection.execute(
                     """
                     INSERT INTO cp_job_events(job_id, kind, message, details)
-                    VALUES (%s, 'claimed', 'Job claimed by worker', %s)
+                    VALUES (%s, %s, %s, %s)
                     """,
-                    (job_id, Jsonb({"worker_id": worker_id})),
+                    (
+                        job_id,
+                        "resumed" if resumed else "claimed",
+                        "Running job resumed by worker" if resumed else "Job claimed by worker",
+                        Jsonb({"worker_id": worker_id}),
+                    ),
                 )
                 project = connection.execute(
                     """
@@ -886,16 +930,29 @@ class PostgresControlStore:
         value["project"] = dict(project)
         return value
 
-    def heartbeat_job(self, job_id: str, worker_id: str, phase: str, lease_seconds: int) -> bool:
+    def heartbeat_job(
+        self,
+        job_id: str,
+        worker_id: str,
+        phase: str,
+        lease_seconds: int,
+        progress: dict[str, Any] | None = None,
+    ) -> bool:
         with self._connect() as connection:
             with connection.transaction():
                 row = connection.execute(
                     """
-                    UPDATE cp_jobs SET phase=%s, lease_expires_at=NOW() + (%s * INTERVAL '1 second'),
-                        updated_at=NOW()
+                    UPDATE cp_jobs SET phase=%s, progress=COALESCE(%s, progress),
+                        lease_expires_at=NOW() + (%s * INTERVAL '1 second'), updated_at=NOW()
                     WHERE id=%s AND worker_id=%s AND state='running' RETURNING id
                     """,
-                    (phase, lease_seconds, job_id, worker_id),
+                    (
+                        phase,
+                        Jsonb(progress) if progress is not None else None,
+                        lease_seconds,
+                        job_id,
+                        worker_id,
+                    ),
                 ).fetchone()
                 if row:
                     connection.execute(
@@ -948,6 +1005,17 @@ class PostgresControlStore:
                         """,
                         (job_id, state, f"Job {state}", Jsonb(details)),
                     )
+                else:
+                    current = connection.execute(
+                        "SELECT state, worker_id FROM cp_jobs WHERE id=%s",
+                        (job_id,),
+                    ).fetchone()
+                    if (
+                        current
+                        and current["state"] == state
+                        and current["worker_id"] == worker_id
+                    ):
+                        return True
         return bool(row)
 
     def add_artifact(
@@ -982,6 +1050,21 @@ class PostgresControlStore:
                 ).fetchone()
             if not job:
                 raise ValueError("Worker does not own this job")
+            existing = connection.execute(
+                """
+                SELECT id, kind, name, object_key, bytes, sha256, content_type,
+                       subject_id, metadata, second_level_run_id,
+                       created_at::text AS created_at
+                FROM cp_artifacts
+                WHERE job_id=%s AND kind=%s AND name=%s AND sha256=%s
+                  AND subject_id IS NOT DISTINCT FROM %s
+                  AND second_level_run_id IS NOT DISTINCT FROM %s
+                ORDER BY created_at LIMIT 1
+                """,
+                (job_id, kind, name, sha256, subject_id, second_level_run_id),
+            ).fetchone()
+            if existing:
+                return dict(existing)
             row = connection.execute(
                 """
                 INSERT INTO cp_artifacts(
@@ -1030,6 +1113,20 @@ class PostgresControlStore:
             ).fetchone()
             if not job:
                 raise ValueError("Unknown successful job")
+            existing = connection.execute(
+                """
+                SELECT id, kind, name, object_key, bytes, sha256, content_type,
+                       subject_id, metadata, second_level_run_id,
+                       created_at::text AS created_at
+                FROM cp_artifacts
+                WHERE job_id=%s AND kind=%s AND name=%s AND sha256=%s
+                  AND subject_id IS NULL AND second_level_run_id IS NULL
+                ORDER BY created_at LIMIT 1
+                """,
+                (job_id, kind, name, sha256),
+            ).fetchone()
+            if existing:
+                return dict(existing)
             row = connection.execute(
                 """
                 INSERT INTO cp_artifacts(

@@ -36,7 +36,7 @@ def build_mcp_server(
     token_verifier: TokenVerifier | None = None,
     auth: AuthSettings | None = None,
 ) -> MCPServer:
-    """Expose the deterministic engine as nine MCP tools."""
+    """Expose the deterministic engine as MCP tools."""
     operation_service = service or build_operation_service()
     server = MCPServer(
         "CONN Pilot", version=__version__, token_verifier=token_verifier, auth=auth
@@ -104,6 +104,14 @@ def build_mcp_server(
     def get_job_status(job_id: str) -> dict[str, Any]:
         """Return persistent state, current phase, timestamps, and any execution error for a local job."""
         return invoke("get_job_status", {"job_id": job_id})
+
+    @server.tool(
+        title="Get detailed CONN job progress",
+        annotations=read_only,
+    )
+    def get_job_progress(job_id: str) -> dict[str, Any]:
+        """Return path-free stage, subject, activity, and approximate milestone progress for a local job."""
+        return invoke("get_job_progress", {"job_id": job_id})
 
     @server.tool(
         title="Read CONN job logs",

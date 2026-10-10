@@ -44,6 +44,7 @@
   },
   "surfaces": [
     "get_experiment_quality_report",
+    "review portal",
     "reproducibility package: experiment-quality.json, report.json, HTML and PDF"
   ]
 }

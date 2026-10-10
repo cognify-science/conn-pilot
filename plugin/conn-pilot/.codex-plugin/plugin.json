@@ -3,10 +3,10 @@
   "version": "0.1.0-beta.1",
   "description": "Design, execute and review reproducible CONN analyses on the authenticated CONN Pilot sandbox.",
   "author": {
-    "name": "CONN Pilot"
+    "name": "Cognify Science"
   },
-  "homepage": "https://github.com/GuillermoPoblete/conn-pilot",
-  "repository": "https://github.com/GuillermoPoblete/conn-pilot",
+  "homepage": "https://github.com/cognify-science/conn-pilot",
+  "repository": "https://github.com/cognify-science/conn-pilot",
   "license": "Proprietary",
   "keywords": [
     "neuroimaging",
@@ -21,14 +21,14 @@
     "displayName": "CONN Pilot",
     "shortDescription": "Run and review reproducible CONN analyses",
     "longDescription": "Guide a researcher from a supported CONN experiment design through parameter evidence, remote execution, subject-level quality review, sample recalculation and a reproducibility package.",
-    "developerName": "CONN Pilot",
+    "developerName": "Cognify Science",
     "category": "Research",
     "capabilities": [
       "Interactive",
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/GuillermoPoblete/conn-pilot",
+    "websiteURL": "https://github.com/cognify-science/conn-pilot",
     "defaultPrompt": [
       "Show me the CONN analyses available in the sandbox and help me design one.",
       "Review the quality and scientific status of my latest CONN Pilot result."

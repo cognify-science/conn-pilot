@@ -6,18 +6,73 @@ import json
 import mimetypes
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .control_plane import materialize_remote_project
 from .io import load_yaml, sha256_file, write_json, write_yaml
 from .mcp_server import build_operation_service
+from .preflight import load_bids_metadata
 from .second_level import run_second_level_recalculation
+
+
+class LocalCapacityBusy(RuntimeError):
+    """A local CONN execution still owns the single execution slot."""
+
+
+class SupervisorLock:
+    """Cross-process singleton lock for the distributed supervisor."""
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        self.handle: Any = None
+
+    def __enter__(self) -> SupervisorLock:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.handle = self.path.open("a+b")
+        if self.path.stat().st_size == 0:
+            self.handle.write(b"0")
+            self.handle.flush()
+            os.fsync(self.handle.fileno())
+        self.handle.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (OSError, BlockingIOError):
+            self.handle.close()
+            self.handle = None
+            raise RuntimeError("Another distributed worker supervisor is already running")
+        return self
+
+    def __exit__(self, *_args: Any) -> None:
+        if not self.handle:
+            return
+        try:
+            self.handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            self.handle.close()
+            self.handle = None
 
 
 def load_registry(path: str | Path) -> dict[str, dict[str, Any]]:
@@ -62,13 +117,66 @@ def normalize_local_dataset(dataset: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError(f"Dataset file is outside its root: {path}")
             normalized[modality] = [str(path)]
         normalized_subjects.append(normalized)
-    return {
+    normalized_dataset = {
         "id": str(dataset["id"]),
         "label": str(dataset.get("label", dataset["id"])),
         "root": str(root),
         "layout": str(dataset.get("layout", "bids")),
         "tr_seconds": dataset.get("tr_seconds"),
         "subjects": normalized_subjects,
+    }
+    normalized_dataset["acquisition_metadata"] = inspect_acquisition_metadata(
+        normalized_dataset
+    )
+    return normalized_dataset
+
+
+def inspect_acquisition_metadata(dataset: dict[str, Any]) -> dict[str, Any]:
+    """Create a path-free inventory of acquisition metadata needed by CONN."""
+    root = Path(str(dataset["root"]))
+    records: list[dict[str, Any]] = []
+    for subject in dataset["subjects"]:
+        available = True
+        unreadable = False
+        source_count = 0
+        for raw_path in subject["functional"]:
+            try:
+                metadata, sources = load_bids_metadata(Path(raw_path), root)
+                timing = metadata.get("SliceTiming")
+                available = available and bool(isinstance(timing, list) and timing)
+                source_count += len(sources)
+            except ValueError:
+                available = False
+                unreadable = True
+        records.append(
+            {
+                "subject_id": subject["id"],
+                "slice_timing_available": available,
+                "metadata_source_count": source_count,
+                "metadata_unreadable": unreadable,
+            }
+        )
+    missing = [record["subject_id"] for record in records if not record["slice_timing_available"]]
+    unreadable = [record["subject_id"] for record in records if record["metadata_unreadable"]]
+    return {
+        "schema_version": "conn_pilot_acquisition_metadata_v1",
+        "slice_timing": {
+            "status": "complete" if not missing else "missing",
+            "available_count": len(records) - len(missing),
+            "subject_count": len(records),
+            "missing_subject_ids": missing,
+            "unreadable_subject_ids": unreadable,
+            "requires_resolution_for_default_mni": bool(missing),
+            "available_options": (
+                []
+                if not missing
+                else [
+                    "provide_exact_slice_timing",
+                    "retrieve_exact_acquisition_order_from_dataset_documentation_or_literature",
+                    "omit_slice_timing_correction",
+                ]
+            ),
+        },
     }
 
 
@@ -105,6 +213,7 @@ def inventory_record(dataset: dict[str, Any]) -> dict[str, Any]:
             "subject_count": len(dataset["subjects"]),
             "file_count": file_count,
             "total_bytes": total_bytes,
+            "acquisition_metadata": dataset["acquisition_metadata"],
         },
     }
 
@@ -253,43 +362,174 @@ class DistributedWorker:
         }
         project_definition = materialize_remote_project(remote_project, local_dataset, use_placeholders=False)
         remote_dir = self.work_root / "remote" / remote_job_id
+        snapshot_path = remote_dir / "remote-job.json"
+        recovery_path = remote_dir / "recovery-state.json"
+        self._write_json_atomic(snapshot_path, remote_job)
+        recovery = self._read_recovery_state(recovery_path, remote_job_id)
+        self._write_recovery_state(
+            recovery_path,
+            remote_job_id,
+            "running",
+            local_job_id=recovery.get("local_job_id"),
+            recovery_count=int(recovery.get("recovery_count", 0) or 0),
+            last_error=recovery.get("last_error"),
+        )
         project_path = remote_dir / "project.yaml"
         write_yaml(project_path, project_definition)
         service = build_operation_service()
         state_path = remote_dir / "worker-state.json"
-        local_job_id = self._restored_local_job_id(state_path, service)
-        if not local_job_id:
-            submitted = service.submit_job(str(project_path))
-            if not submitted["ok"]:
-                errors = sanitize_for_remote(submitted["errors"], [dataset["root"], str(self.work_root)])
-                self._complete(remote_job_id, "failed", {"submission_errors": errors}, "; ".join(errors))
-                return
-            local_job_id = str(submitted["data"]["job"]["id"])
-            write_json(
-                state_path,
-                {
-                    "schema_version": "conn_pilot_worker_state_v1",
-                    "remote_job_id": remote_job_id,
-                    "local_job_id": local_job_id,
-                },
-            )
-        last_heartbeat = 0.0
         while True:
-            status = service.get_job_status(local_job_id)
-            job = status["data"]["job"]
-            now = time.monotonic()
-            if now - last_heartbeat >= self.heartbeat_seconds:
-                self.client.post(
-                    f"/worker/v1/jobs/{remote_job_id}/heartbeat",
-                    {"worker_id": self.worker_id, "phase": status["data"]["phase"]},
+            local_job_id = self._restored_local_job_id(state_path, service)
+            if not local_job_id:
+                submitted = service.submit_job(str(project_path))
+                if not submitted["ok"]:
+                    errors = sanitize_for_remote(
+                        submitted["errors"], [dataset["root"], str(self.work_root)]
+                    )
+                    message = "; ".join(str(item) for item in errors)
+                    if "Another CONN job is active" in message:
+                        self._reconcile_local_slot(service)
+                        self._write_recovery_state(
+                            recovery_path,
+                            remote_job_id,
+                            "running",
+                            recovery_count=int(recovery.get("recovery_count", 0) or 0),
+                            last_error=message,
+                        )
+                        self._heartbeat_waiting(remote_job_id, message)
+                        raise LocalCapacityBusy(message)
+                    self._complete(
+                        remote_job_id,
+                        "failed",
+                        {"submission_errors": errors},
+                        message,
+                    )
+                    self._write_recovery_state(
+                        recovery_path,
+                        remote_job_id,
+                        "permanent_failed",
+                        recovery_count=int(recovery.get("recovery_count", 0) or 0),
+                        last_error=message,
+                    )
+                    return
+                local_job_id = str(submitted["data"]["job"]["id"])
+                self._write_worker_state(state_path, remote_job_id, local_job_id)
+                self._write_recovery_state(
+                    recovery_path,
+                    remote_job_id,
+                    "running",
+                    local_job_id=local_job_id,
+                    recovery_count=int(recovery.get("recovery_count", 0) or 0),
                 )
-                last_heartbeat = now
-            if status["data"]["terminal"]:
-                break
-            time.sleep(min(5, self.heartbeat_seconds))
-        if job["state"] != "succeeded":
-            self._complete(remote_job_id, "failed", {"local_job_id": local_job_id}, job.get("error"))
-            return
+            else:
+                # Repair a missing/corrupt link after conservative process-based reassociation.
+                self._write_worker_state(state_path, remote_job_id, local_job_id)
+                self._write_recovery_state(
+                    recovery_path,
+                    remote_job_id,
+                    "running",
+                    local_job_id=local_job_id,
+                    recovery_count=int(recovery.get("recovery_count", 0) or 0),
+                    last_error=recovery.get("last_error"),
+                )
+
+            last_heartbeat = 0.0
+            restart_local = False
+            while True:
+                status = service.get_job_status(local_job_id)
+                job = status["data"]["job"]
+                now = time.monotonic()
+                if now - last_heartbeat >= self.heartbeat_seconds and not status["data"]["terminal"]:
+                    if (
+                        self._orphan_check_due(job)
+                        and _local_job_has_live_process(job) is False
+                    ):
+                        message = (
+                            "Recovered interrupted local execution: persisted state was active "
+                            "but no matching CONN worker or MATLAB process was running"
+                        )
+                        service.store.update(local_job_id, "failed", error=message)
+                        recovery["recovery_count"] = int(
+                            recovery.get("recovery_count", 0) or 0
+                        ) + 1
+                        recovery["last_error"] = message
+                        self._write_recovery_state(
+                            recovery_path,
+                            remote_job_id,
+                            "running",
+                            recovery_count=recovery["recovery_count"],
+                            last_error=message,
+                        )
+                        state_path.unlink(missing_ok=True)
+                        restart_local = True
+                        break
+                    progress = service.get_job_progress(local_job_id)
+                    progress_payload = sanitize_for_remote(
+                        progress["data"].get("progress"),
+                        [dataset["root"], str(self.work_root)],
+                    )
+                    if not isinstance(progress_payload, dict):
+                        progress_payload = {}
+                    progress_payload["recovery"] = {
+                        "state": "running",
+                        "local_job_id": local_job_id,
+                        "restart_count": int(recovery.get("recovery_count", 0) or 0),
+                        "last_interruption": recovery.get("last_error"),
+                    }
+                    self.client.post(
+                        f"/worker/v1/jobs/{remote_job_id}/heartbeat",
+                        {
+                            "worker_id": self.worker_id,
+                            "phase": status["data"]["phase"],
+                            "progress": progress_payload,
+                        },
+                    )
+                    last_heartbeat = now
+                if status["data"]["terminal"]:
+                    break
+                time.sleep(min(5, self.heartbeat_seconds))
+            if restart_local:
+                continue
+            if job["state"] != "succeeded":
+                error = str(job.get("error") or "Local CONN execution failed")
+                if self._recoverable_local_failure(error):
+                    recovery["recovery_count"] = int(
+                        recovery.get("recovery_count", 0) or 0
+                    ) + 1
+                    recovery["last_error"] = error
+                    self._write_recovery_state(
+                        recovery_path,
+                        remote_job_id,
+                        "running",
+                        recovery_count=recovery["recovery_count"],
+                        last_error=error,
+                    )
+                    state_path.unlink(missing_ok=True)
+                    continue
+                self._complete(
+                    remote_job_id,
+                    "failed",
+                    {"local_job_id": local_job_id},
+                    error,
+                )
+                self._write_recovery_state(
+                    recovery_path,
+                    remote_job_id,
+                    "permanent_failed",
+                    local_job_id=local_job_id,
+                    recovery_count=int(recovery.get("recovery_count", 0) or 0),
+                    last_error=error,
+                )
+                return
+            break
+
+        self._write_recovery_state(
+            recovery_path,
+            remote_job_id,
+            "publishing",
+            local_job_id=local_job_id,
+            recovery_count=int(recovery.get("recovery_count", 0) or 0),
+        )
         results = service.list_results(local_job_id)
         qc = service.get_qc_summary(local_job_id)
         run_dir = Path(job["run_dir"])
@@ -305,23 +545,265 @@ class DistributedWorker:
             },
             None,
         )
+        self._write_recovery_state(
+            recovery_path,
+            remote_job_id,
+            "completed",
+            local_job_id=local_job_id,
+            recovery_count=int(recovery.get("recovery_count", 0) or 0),
+        )
+
+    def recover_pending_job(self) -> bool:
+        """Resume the durable local intent before contacting the control-plane queue."""
+        remote_root = self.work_root / "remote"
+        if not remote_root.is_dir():
+            return False
+        candidates: list[tuple[float, Path, dict[str, Any]]] = []
+        for path in remote_root.glob("*/recovery-state.json"):
+            try:
+                state = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if state.get("state") not in {"running", "publishing"}:
+                continue
+            snapshot = path.parent / "remote-job.json"
+            if not snapshot.is_file():
+                continue
+            candidates.append((path.stat().st_mtime, snapshot, state))
+        if not candidates:
+            return False
+        _, snapshot_path, _ = max(candidates, key=lambda item: item[0])
+        remote_job = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        self.run_job(remote_job)
+        return True
+
+    def recover_pending_second_level(self) -> bool:
+        root = self.work_root / "second-level"
+        if not root.is_dir():
+            return False
+        candidates: list[tuple[float, Path]] = []
+        for path in root.glob("*/recovery-state.json"):
+            try:
+                state = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if state.get("state") not in {"running", "publishing"}:
+                continue
+            snapshot = path.parent / "task.json"
+            if snapshot.is_file():
+                candidates.append((path.stat().st_mtime, snapshot))
+        if not candidates:
+            return False
+        _, snapshot = max(candidates, key=lambda item: item[0])
+        task = json.loads(snapshot.read_text(encoding="utf-8"))
+        try:
+            self.run_second_level(task)
+        except Exception as error:
+            run_id = str(task["id"])
+            self._complete_second_level(
+                run_id, "failed", {}, f"Worker error: {error}"
+            )
+            self._write_recovery_state(
+                snapshot.parent / "recovery-state.json",
+                run_id,
+                "permanent_failed",
+                last_error=str(error),
+            )
+        return True
+
+    @staticmethod
+    def _read_recovery_state(path: Path, remote_job_id: str) -> dict[str, Any]:
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"remote_job_id": remote_job_id, "recovery_count": 0}
+        return value if isinstance(value, dict) else {"remote_job_id": remote_job_id}
+
+    @staticmethod
+    def _write_json_atomic(path: Path, value: Any) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        payload = json.dumps(value, indent=2, ensure_ascii=False) + "\n"
+        try:
+            with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    @classmethod
+    def _write_recovery_state(
+        cls,
+        path: Path,
+        remote_job_id: str,
+        state: str,
+        *,
+        local_job_id: str | None = None,
+        recovery_count: int = 0,
+        last_error: Any = None,
+    ) -> None:
+        cls._write_json_atomic(
+            path,
+            {
+                "schema_version": "conn_pilot_recovery_state_v1",
+                "remote_job_id": remote_job_id,
+                "state": state,
+                "local_job_id": local_job_id,
+                "recovery_count": recovery_count,
+                "last_error": last_error,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+    @staticmethod
+    def _recoverable_local_failure(error: str) -> bool:
+        normalized = error.casefold()
+        return any(
+            marker in normalized
+            for marker in (
+                "another conn job is active",
+                "orphaned local job",
+                "interrupted local execution",
+                "worker process exited",
+                "matlab process disappeared",
+                "connection reset",
+                "temporary network",
+            )
+        )
+
+    def _orphan_check_due(self, job: dict[str, Any]) -> bool:
+        """Avoid treating process-launch latency as a vanished execution."""
+        raw = job.get("updated_at") or job.get("created_at")
+        if not raw:
+            return True
+        try:
+            updated = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return True
+        grace = max(60, self.heartbeat_seconds * 2)
+        return (datetime.now(timezone.utc) - updated).total_seconds() >= grace
+
+    def _heartbeat_waiting(self, remote_job_id: str, message: str) -> None:
+        self.client.post(
+            f"/worker/v1/jobs/{remote_job_id}/heartbeat",
+            {
+                "worker_id": self.worker_id,
+                "phase": "waiting_for_local_recovery",
+                "progress": {
+                    "activity": {"state": "recovering", "message": message},
+                    "reported_at": datetime.now(timezone.utc).isoformat(),
+                },
+            },
+        )
+
+    @staticmethod
+    def _reconcile_local_slot(service: Any) -> bool:
+        blocked = False
+        for job in service.store.list():
+            if job.get("state") not in {"queued", "preparing", "running"}:
+                continue
+            alive = _local_job_has_live_process(job)
+            if alive is False:
+                service.store.update(
+                    str(job["id"]),
+                    "failed",
+                    error=(
+                        "Recovered orphaned local execution before queue claim: no matching "
+                        "CONN worker or MATLAB process was running"
+                    ),
+                )
+            else:
+                blocked = True
+        return blocked
 
     @staticmethod
     def _restored_local_job_id(state_path: Path, service: Any) -> str | None:
         if not state_path.is_file():
-            return None
+            return DistributedWorker._clear_unlinked_orphaned_local_job(service)
         try:
             value = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            return None
+            return DistributedWorker._clear_unlinked_orphaned_local_job(service)
         if value.get("schema_version") != "conn_pilot_worker_state_v1":
-            return None
+            return DistributedWorker._clear_unlinked_orphaned_local_job(service)
         local_job_id = str(value.get("local_job_id", ""))
         job = service.store.get(local_job_id) if local_job_id else None
-        return local_job_id if job and job.get("state") != "failed" else None
+        if not job or job.get("state") == "failed":
+            return None
+        if job.get("state") == "succeeded":
+            return local_job_id
+        process_alive = _local_job_has_live_process(job)
+        if process_alive is not False:
+            return local_job_id
+        service.store.update(
+            local_job_id,
+            "failed",
+            error=(
+                "Recovered orphaned local job: the persisted state was active but no matching "
+                "CONN worker or MATLAB process was running"
+            ),
+        )
+        return None
+
+    @staticmethod
+    def _clear_unlinked_orphaned_local_job(service: Any) -> str | None:
+        """Reassociate one live job or clear one proven orphan when its link is unreadable.
+
+        A missing or corrupt worker-state file must never invalidate a potentially live
+        MATLAB run. The only active local job is adopted when its process is visible;
+        it is cleared only after inspection proves that no process remains.
+        """
+        active = [
+            job
+            for job in service.store.list()
+            if job.get("state") in {"queued", "preparing", "running"}
+        ]
+        if len(active) != 1:
+            return None
+        job = active[0]
+        process_alive = _local_job_has_live_process(job)
+        if process_alive is True:
+            return str(job["id"])
+        if process_alive is None:
+            return None
+        service.store.update(
+            str(job["id"]),
+            "failed",
+            error=(
+                "Recovered orphaned unlinked local job: worker state was missing or corrupt "
+                "and no matching CONN worker or MATLAB process was running"
+            ),
+        )
+        return None
+
+    @staticmethod
+    def _write_worker_state(state_path: Path, remote_job_id: str, local_job_id: str) -> None:
+        """Durably replace the remote-to-local job link without exposing a partial file."""
+        DistributedWorker._write_json_atomic(
+            state_path,
+            {
+                "schema_version": "conn_pilot_worker_state_v1",
+                "remote_job_id": remote_job_id,
+                "local_job_id": local_job_id,
+            },
+        )
 
     def run_once(self) -> bool:
+        try:
+            if self.recover_pending_job():
+                return True
+            if self.recover_pending_second_level():
+                return True
+        except LocalCapacityBusy:
+            return True
         self.heartbeat()
+        service = build_operation_service()
+        if self._reconcile_local_slot(service):
+            return True
         second_level = self.claim_second_level()
         if second_level:
             try:
@@ -330,18 +812,30 @@ class DistributedWorker:
                 self._complete_second_level(
                     str(second_level["id"]), "failed", {}, f"Worker error: {error}"
                 )
+                self._write_recovery_state(
+                    self.work_root / "second-level" / str(second_level["id"]) / "recovery-state.json",
+                    str(second_level["id"]),
+                    "permanent_failed",
+                    last_error=str(error),
+                )
             return True
         job = self.claim()
         if not job:
             return False
         try:
             self.run_job(job)
+        except LocalCapacityBusy:
+            return True
         except Exception as error:
             self._complete(str(job["id"]), "failed", {}, f"Worker error: {error}")
         return True
 
     def run_second_level(self, task: dict[str, Any]) -> None:
         run_id = str(task["id"])
+        recovery_dir = self.work_root / "second-level" / run_id
+        recovery_path = recovery_dir / "recovery-state.json"
+        self._write_json_atomic(recovery_dir / "task.json", task)
+        self._write_recovery_state(recovery_path, run_id, "running")
         source = dict(task["source_job"])
         remote_job_id = str(task["job_id"])
         local_job_id = str((source.get("result_summary") or {}).get("local_job_id", ""))
@@ -360,6 +854,7 @@ class DistributedWorker:
             [str(value) for value in task["included_subject_ids"]],
             load_yaml(service.environment_path),
         )
+        self._write_recovery_state(recovery_path, run_id, "publishing")
         uploaded = self._upload_second_level(
             remote_job_id, run_id, result["artifact_paths"], Path(result["output_dir"])
         )
@@ -374,6 +869,7 @@ class DistributedWorker:
             },
             None,
         )
+        self._write_recovery_state(recovery_path, run_id, "completed")
 
     def _complete_second_level(
         self, run_id: str, state: str, summary: dict[str, Any], error: str | None
@@ -401,10 +897,11 @@ class DistributedWorker:
                 skipped += 1
                 continue
             content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            digest = sha256_file(path)
             prepared = self.client.post(
                 f"/worker/v1/jobs/{remote_job_id}/artifacts/prepare",
                 {"worker_id": self.worker_id, "name": f"{run_id}-{path.name}",
-                 "content_type": content_type},
+                 "content_type": content_type, "sha256": digest},
             )
             self.client.upload(prepared["upload_url"], path, content_type)
             relative_path = (
@@ -419,7 +916,7 @@ class DistributedWorker:
                     "name": path.name,
                     "object_key": prepared["object_key"],
                     "bytes": size,
-                    "sha256": sha256_file(path),
+                    "sha256": digest,
                     "content_type": content_type,
                     "metadata": {"relative_path": relative_path},
                     "second_level_run_id": run_id,
@@ -488,9 +985,15 @@ class DistributedWorker:
                 skipped += 1
                 continue
             content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            digest = sha256_file(path)
             prepared = self.client.post(
                 f"/worker/v1/jobs/{remote_job_id}/artifacts/prepare",
-                {"worker_id": self.worker_id, "name": path.name, "content_type": content_type},
+                {
+                    "worker_id": self.worker_id,
+                    "name": path.name,
+                    "content_type": content_type,
+                    "sha256": digest,
+                },
             )
             self.client.upload(prepared["upload_url"], path, content_type)
             self.client.post(
@@ -501,7 +1004,7 @@ class DistributedWorker:
                     "name": path.name,
                     "object_key": prepared["object_key"],
                     "bytes": size,
-                    "sha256": sha256_file(path),
+                    "sha256": digest,
                     "content_type": content_type,
                     "subject_id": subject_id,
                     "metadata": metadata,
@@ -579,6 +1082,88 @@ def sanitize_for_remote(value: Any, private_roots: list[str]) -> Any:
     return value
 
 
+def _local_job_has_live_process(job: dict[str, Any]) -> bool | None:
+    """Return whether a local execution process still belongs to this persisted job.
+
+    Process inspection is deliberately conservative: an unavailable process inventory returns
+    ``None`` so a transient inspection failure never invalidates a potentially live MATLAB run.
+    """
+    command_lines = _process_command_lines()
+    if command_lines is None:
+        return None
+    needles = {
+        str(job.get("id", "")),
+        str(job.get("batch_path", "")),
+        str(job.get("run_dir", "")),
+    }
+    normalized_needles = {
+        _normalize_process_text(value) for value in needles if value.strip()
+    }
+    return any(
+        needle in _normalize_process_text(command_line)
+        for command_line in command_lines
+        for needle in normalized_needles
+    )
+
+
+def _process_command_lines() -> list[str] | None:
+    if os.name == "nt":
+        command = [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            (
+                "@(Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine) "
+                "| ConvertTo-Json -Compress"
+            ),
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            if completed.returncode != 0 or not completed.stdout.strip():
+                return None
+            value = json.loads(completed.stdout)
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+            return None
+        records = value if isinstance(value, list) else [value]
+        return [
+            str(record.get("CommandLine") or "")
+            for record in records
+            if isinstance(record, dict) and record.get("CommandLine")
+        ]
+
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return None
+    command_lines: list[str] = []
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return None
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            command_line = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(
+                "utf-8", errors="replace"
+            )
+        except OSError:
+            continue
+        if command_line:
+            command_lines.append(command_line)
+    return command_lines
+
+
+def _normalize_process_text(value: str) -> str:
+    return value.replace("\\", "/").casefold()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if not args.control_url or not args.token:
@@ -591,11 +1176,21 @@ def main(argv: list[str] | None = None) -> int:
         registry=load_registry(args.registry),
         work_root=args.work_root,
     )
-    while True:
-        worker.run_once()
-        if args.once:
-            return 0
-        time.sleep(max(5, args.poll_seconds))
+    try:
+        with SupervisorLock(Path(args.work_root).resolve() / "distributed-worker.lock"):
+            while True:
+                try:
+                    worker.run_once()
+                except Exception as error:
+                    print(f"Distributed worker loop recovered from error: {error}", file=sys.stderr)
+                    if args.once:
+                        return 1
+                if args.once:
+                    return 0
+                time.sleep(max(5, args.poll_seconds))
+    except RuntimeError as error:
+        print(str(error), file=sys.stderr)
+        return 0
 
 
 if __name__ == "__main__":

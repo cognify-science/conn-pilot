@@ -1,17 +1,17 @@
-# CONN Pilot private beta plugin
+# CONN Pilot research-preview plugin
 
-This package connects Codex or ChatGPT Work to the deployed CONN Pilot MCP
-server and adds four researcher workflows. Authentication is performed by the
-server through Auth0; no OpenAI API key is required by this plugin.
+This package connects a compatible AI client to the authenticated CONN Pilot MCP
+server and contributes five workflows: setup, experiment design, method
+comparison, execution, and result review. Authentication uses browser OAuth;
+the package contains no API key, access token, client secret, or worker address.
 
-For local testing, add the repository as a marketplace and install the plugin:
+For Codex, add this repository as a marketplace and install the plugin:
 
 ```powershell
 codex plugin marketplace add C:\path\to\conn-pilot
-codex plugin add conn-pilot@conn-pilot-private
+codex plugin add conn-pilot@conn-pilot-research-preview
 ```
 
-For a ChatGPT Business pilot, an administrator can publish the locally tested
-plugin to the workspace and grant access only to the intended roles. Each
-researcher then authenticates independently with the CONN Pilot Auth0 account
-assigned to them.
+Each researcher authenticates independently. Workspace administrators may
+restrict installation or use. Read `docs/integrations/` in the repository for
+ChatGPT, Codex, Claude, and Microsoft Copilot instructions.

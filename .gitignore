@@ -1,12 +1,13 @@
-# Credenciales y configuración local
+# Credentials and machine-specific configuration
 .env
 .env.*
 !.env.example
 *.local.yaml
 *.local.yml
 *.local.json
+*.bak
 
-# Entornos y cachés Python
+# Python environments, caches, and packages
 .venv/
 venv/
 .tools/
@@ -19,7 +20,7 @@ __pycache__/
 build/
 dist/
 
-# Datos y artefactos de ejecución locales
+# Local datasets and generated execution artifacts
 data/
 work/
 generated/
@@ -32,7 +33,9 @@ MathWorks/
 *.db
 *.sqlite
 *.sqlite3
+conn-pilot-assets.tar
+conn-pilot-source.tar
 
-# Sistema operativo
+# Operating system files
 .DS_Store
 Thumbs.db

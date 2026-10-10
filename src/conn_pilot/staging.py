@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import os
 import stat
 from pathlib import Path
 from typing import Any
+
+from .preflight import load_bids_metadata
 
 
 def stage_project_inputs(project: dict[str, Any], run_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Copy referenced images into the run directory so CONN never mutates source data."""
     staged = copy.deepcopy(project)
     input_root = run_dir / "inputs"
+    dataset_root = Path(str(project.get("dataset", {}).get("root", "")))
     records: list[dict[str, Any]] = []
     for subject in staged["subjects"]:
         subject_id = str(subject["id"])
@@ -21,8 +25,7 @@ def stage_project_inputs(project: dict[str, Any], run_dir: Path) -> tuple[dict[s
             target = modality_dir / source.name
             digest = _copy_writable(source, target)
             subject[modality][0] = target.as_posix()
-            records.append(
-                {
+            record = {
                     "subject": subject_id,
                     "modality": modality,
                     "source": str(source),
@@ -30,10 +33,21 @@ def stage_project_inputs(project: dict[str, Any], run_dir: Path) -> tuple[dict[s
                     "source_sha256": digest,
                     "bytes": target.stat().st_size,
                 }
-            )
-            sidecar = _json_sidecar(source)
-            if sidecar.is_file():
-                _copy_writable(sidecar, modality_dir / sidecar.name)
+            records.append(record)
+            if modality == "functional":
+                metadata, metadata_sources = load_bids_metadata(source, dataset_root)
+                if metadata_sources:
+                    target_sidecar = _json_sidecar(target)
+                    target_sidecar.write_text(
+                        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8",
+                    )
+                    record["metadata_sources"] = metadata_sources
+                    record["staged_metadata"] = str(target_sidecar)
+            else:
+                sidecar = _json_sidecar(source)
+                if sidecar.is_file():
+                    _copy_writable(sidecar, modality_dir / sidecar.name)
     staged["dataset"]["root"] = input_root.as_posix()
     return staged, records
 

@@ -18,6 +18,7 @@ from .io import sha256_file, write_json, write_yaml
 from .project import execution_identifier
 from .results import collect_artifacts
 from .pipeline_graph import build_node_execution_plan
+from .preflight import build_execution_preflight
 from .staging import stage_project_inputs
 
 
@@ -34,6 +35,8 @@ class JobStore:
     def _connect(self):
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA busy_timeout=30000")
+        connection.execute("PRAGMA synchronous=FULL")
         try:
             yield connection
             connection.commit()
@@ -42,6 +45,7 @@ class JobStore:
 
     def _initialize(self) -> None:
         with self._connect() as connection:
+            connection.execute("PRAGMA journal_mode=WAL")
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS jobs (
@@ -161,10 +165,21 @@ def execute_queued_project(
     try:
         project = load_yaml(request_snapshot)
         store.update(job_id, "preparing")
+        execution_settings = environment.get("execution", {})
+        preflight = build_execution_preflight(project, execution_settings)
+        write_json(run_dir / "preflight.json", preflight)
+        if not preflight["ready"]:
+            decision = preflight["checks"]["slice_timing"]["decision"]
+            raise ExecutionError(
+                "Execution preflight requires parameter resolution: "
+                + str(decision.get("reason", "unresolved execution requirement"))
+                + " Available options: "
+                + ", ".join(decision.get("available_options", []))
+            )
         execution_project, staged_inputs = stage_project_inputs(project, run_dir)
+        execution_project["execution_preflight"] = preflight
         snapshot = run_dir / "project.execution.yaml"
         write_yaml(snapshot, execution_project)
-        execution_settings = environment.get("execution", {})
         batch_path = generate_conn_batch(
             execution_project, snapshot, run_dir, execution_settings
         )
@@ -191,7 +206,7 @@ def execute_queued_project(
         if not verification["valid"]:
             raise ExecutionError("Expected CONN outputs are missing: " + ", ".join(verification["missing"]))
         artifacts = collect_artifacts(execution_project, run_dir)
-        manifest = build_manifest(project, request_snapshot, snapshot, batch_path, environment, verification, staged_inputs)
+        manifest = build_manifest(execution_project, request_snapshot, snapshot, batch_path, environment, verification, staged_inputs)
         manifest["artifacts"] = artifacts["counts"]
         write_json(run_dir / "manifest.json", manifest)
         store.update(job_id, "succeeded", return_code=return_code)
@@ -285,6 +300,7 @@ def build_manifest(
             "parallel_profile": environment.get("execution", {}).get(
                 "parallel_profile"
             ),
+            "preflight": project.get("execution_preflight"),
         },
         "inputs": {
             "request_project_yaml": {"path": str(request_snapshot), "sha256": sha256_file(request_snapshot)},

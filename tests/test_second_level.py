@@ -49,8 +49,13 @@ class SecondLevelTests(unittest.TestCase):
                 )
             script = result["script_path"].read_text(encoding="utf-8")
             self.assertIn("{[1.0 0.0 1.0]}", script)
+            self.assertIn("CP_run-1_1_AllSubjects", script)
             self.assertIn("sample_abcdef0123456789", script)
             self.assertEqual(result["manifest"]["included_subject_ids"], ["sub-001", "sub-003"])
+            self.assertEqual(
+                result["manifest"]["effect_aliases"]["AllSubjects"],
+                "CP_run-1_1_AllSubjects",
+            )
             self.assertEqual(result["manifest"]["model_count"], 1)
 
     def test_recalculation_rejects_a_single_subject(self) -> None:
@@ -94,7 +99,10 @@ class SecondLevelTests(unittest.TestCase):
                     project, run_dir, "run-2", "sha256:1234567890abcdef", ["s1", "s3", "s4"], environment
                 )
             script = result["script_path"].read_text(encoding="utf-8")
-            self.assertIn("{'control', 'patient', 'age'}", script)
+            self.assertIn(
+                "{'CP_run-2_2_control', 'CP_run-2_3_patient', 'CP_run-2_4_age'}",
+                script,
+            )
             self.assertIn("{[1.0 0.0 0.0 0.0], [0.0 0.0 1.0 1.0], [20.0 0.0 40.0 50.0]}", script)
             self.assertEqual(result["manifest"]["design_type"], "two_independent_groups")
 

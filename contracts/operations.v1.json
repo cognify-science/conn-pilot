@@ -6,7 +6,7 @@
     "required": ["schema_version", "operation", "arguments"],
     "properties": {
       "schema_version": {"const": "conn_pilot_operation_request_v1"},
-      "operation": {"enum": ["list_pipelines", "inspect_dataset", "validate_project", "generate_execution_plan", "submit_job", "get_job_status", "get_job_logs", "list_results", "get_qc_summary"]},
+      "operation": {"enum": ["list_pipelines", "inspect_dataset", "validate_project", "generate_execution_plan", "submit_job", "get_job_status", "get_job_progress", "get_job_logs", "list_results", "get_qc_summary"]},
       "arguments": {"type": "object"}
     }
   },
@@ -52,6 +52,12 @@
       "arguments": {"job_id": {"type": "string", "required": true}},
       "data_required": ["job", "phase", "terminal"],
       "side_effect": "none"
+    },
+    "get_job_progress": {
+      "arguments": {"job_id": {"type": "string", "required": true}},
+      "data_required": ["job_id", "progress"],
+      "side_effect": "none",
+      "notes": "Progress is path-free and approximate; it reports durable artifact milestones, active subjects and output activity without making QC or scientific decisions."
     },
     "get_job_logs": {
       "arguments": {"job_id": {"type": "string", "required": true}, "stream": {"enum": ["all", "stdout", "stderr", "worker"], "default": "all"}, "tail": {"type": "integer", "minimum": 1, "maximum": 2000, "default": 200}},

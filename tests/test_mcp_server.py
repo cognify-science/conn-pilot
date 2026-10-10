@@ -45,6 +45,7 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
             "generate_execution_plan": {"project_path": "project.yaml"},
             "submit_job": {"project_path": "project.yaml"},
             "get_job_status": {"job_id": "job-1"},
+            "get_job_progress": {"job_id": "job-1"},
             "get_job_logs": {"job_id": "job-1", "stream": "stderr", "tail": 25},
             "list_results": {"job_id": "job-1"},
             "get_qc_summary": {"job_id": "job-1"},

@@ -92,7 +92,14 @@ class Store(Protocol):
     def register_worker(self, worker_id: str, label: str, capabilities: dict[str, Any]) -> None: ...
     def sync_datasets(self, worker_id: str, datasets: list[dict[str, Any]]) -> None: ...
     def claim_job(self, worker_id: str, dataset_ids: list[str], lease_seconds: int) -> dict[str, Any] | None: ...
-    def heartbeat_job(self, job_id: str, worker_id: str, phase: str, lease_seconds: int) -> bool: ...
+    def heartbeat_job(
+        self,
+        job_id: str,
+        worker_id: str,
+        phase: str,
+        lease_seconds: int,
+        progress: dict[str, Any] | None = None,
+    ) -> bool: ...
     def complete_job(
         self, job_id: str, worker_id: str, state: str, summary: dict[str, Any], error: str | None
     ) -> bool: ...
@@ -287,11 +294,16 @@ class ArtifactStorage:
             else None
         )
 
-    def prepare_upload(self, job_id: str, name: str, content_type: str) -> dict[str, str]:
+    def prepare_upload(
+        self, job_id: str, name: str, content_type: str, sha256: str | None = None
+    ) -> dict[str, str]:
         if not self.client:
             raise ValueError("Artifact bucket is not configured")
         safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(name).name).strip("._") or "artifact"
-        object_key = f"jobs/{job_id}/{uuid.uuid4().hex}-{safe_name}"
+        digest = str(sha256 or "").removeprefix("sha256:").lower()
+        if digest and not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError("Artifact sha256 must be a 64-character hexadecimal digest")
+        object_key = f"jobs/{job_id}/{digest or uuid.uuid4().hex}-{safe_name}"
         url = self.client.generate_presigned_url(
             "put_object",
             Params={"Bucket": self.bucket, "Key": object_key, "ContentType": content_type},
@@ -310,7 +322,8 @@ class ArtifactStorage:
         if not self.client:
             raise ValueError("Artifact bucket is not configured")
         safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(name).name).strip("._") or "artifact"
-        object_key = f"jobs/{job_id}/{uuid.uuid4().hex}-{safe_name}"
+        digest = hashlib.sha256(content).hexdigest()
+        object_key = f"jobs/{job_id}/{digest}-{safe_name}"
         self.client.put_object(
             Bucket=self.bucket, Key=object_key, Body=content, ContentType=content_type
         )
@@ -475,6 +488,7 @@ class ControlPlaneService:
                 "capabilities": [
                     "literature_guided_parameter_selection",
                     "validated_conn_execution",
+                    "path_free_job_progress_monitoring",
                     "modular_versioned_pipeline_graphs",
                     "seed_to_voxel_and_roi_to_roi",
                     "one_sample_or_two_independent_group_designs",
@@ -495,6 +509,7 @@ class ControlPlaneService:
                     "resolve_project_parameter",
                     "run_available_flow",
                     "get_job_status",
+                    "get_job_progress",
                     "get_subject_qc",
                     "get_experiment_quality_report",
                     "set_subject_qc_decision",
@@ -927,6 +942,29 @@ class ControlPlaneService:
             {"job": job, "terminal": job["state"] in {"succeeded", "failed", "cancelled"}},
             ok=job["state"] != "failed",
             errors=[job["error"]] if job.get("error") else [],
+        )
+
+    def get_job_progress(self, subject: str, job_id: str) -> dict[str, Any]:
+        job = self._job(job_id, subject)
+        progress = job.get("progress") or None
+        warnings = []
+        if progress is None:
+            warnings.append(
+                "Detailed progress has not been reported yet; the worker may still be queued or may need an upgrade."
+            )
+        return _response(
+            "get_job_progress",
+            {
+                "job_id": job_id,
+                "state": job["state"],
+                "phase": job["phase"],
+                "terminal": job["state"] in {"succeeded", "failed", "cancelled"},
+                "progress": progress,
+                "last_worker_update_at": job.get("updated_at"),
+            },
+            ok=job["state"] != "failed",
+            errors=[job["error"]] if job.get("error") else [],
+            warnings=warnings,
         )
 
     def get_job_logs(self, subject: str, job_id: str) -> dict[str, Any]:
@@ -1902,6 +1940,11 @@ def build_control_plane_server(
         return service.get_job_status(subject(), job_id)
 
     @server.tool(annotations=read_only)
+    def get_job_progress(job_id: str) -> dict[str, Any]:
+        """Read path-free stage, subject, activity, and approximate milestone progress reported by the worker."""
+        return service.get_job_progress(subject(), job_id)
+
+    @server.tool(annotations=read_only)
     def get_job_logs(job_id: str) -> dict[str, Any]:
         """Read structured lifecycle events reported by the control plane and worker."""
         return service.get_job_logs(subject(), job_id)
@@ -2250,11 +2293,17 @@ def build_control_plane_server(
         if error:
             return error
         assert body is not None
+        progress = body.get("progress")
+        if progress is not None and not isinstance(progress, dict):
+            return JSONResponse({"error": "progress_must_be_object"}, status_code=400)
+        if progress is not None and len(json.dumps(progress, separators=(",", ":"))) > 65536:
+            return JSONResponse({"error": "progress_too_large"}, status_code=400)
         updated = store.heartbeat_job(
             request.path_params["job_id"],
             str(body.get("worker_id", "")),
             str(body.get("phase", "running")),
             settings.lease_seconds,
+            progress,
         )
         return JSONResponse({"ok": updated}, status_code=200 if updated else 409)
 
@@ -2281,7 +2330,10 @@ def build_control_plane_server(
         assert body is not None
         try:
             prepared = storage.prepare_upload(
-                request.path_params["job_id"], str(body.get("name", "artifact")), str(body.get("content_type", "application/octet-stream"))
+                request.path_params["job_id"],
+                str(body.get("name", "artifact")),
+                str(body.get("content_type", "application/octet-stream")),
+                str(body.get("sha256", "")) or None,
             )
         except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=503)

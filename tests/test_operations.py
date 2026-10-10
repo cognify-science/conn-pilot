@@ -23,6 +23,7 @@ from conn_pilot.operations import (  # noqa: E402
 from conn_pilot.errors import ExecutionError  # noqa: E402
 from conn_pilot.io import load_yaml  # noqa: E402
 from conn_pilot.jobs import execute_queued_project  # noqa: E402
+from conn_pilot.project import execution_identifier  # noqa: E402
 
 
 class OperationTests(unittest.TestCase):
@@ -36,7 +37,8 @@ class OperationTests(unittest.TestCase):
         functional.write_bytes(b"functional")
         structural.write_bytes(b"structural")
         functional.with_name("sub-001_task-rest_bold.json").write_text(
-            json.dumps({"RepetitionTime": 2.0}), encoding="utf-8"
+            json.dumps({"RepetitionTime": 2.0, "SliceTiming": [0.0, 1.0]}),
+            encoding="utf-8",
         )
         project = yaml.safe_load((ROOT / "examples" / "project.template.yaml").read_text(encoding="utf-8"))
         project["dataset"]["root"] = str(self.dataset)
@@ -125,6 +127,47 @@ class OperationTests(unittest.TestCase):
         logs = self.service.get_job_logs(job_id, stream="stdout", tail=10)
         self.assertEqual(status["data"]["phase"], "denoising")
         self.assertEqual(logs["data"]["logs"][0]["lines"], ["RUNNING DENOISING STEP"])
+
+    def test_job_progress_reports_durable_subject_milestones(self) -> None:
+        submitted = self.service.submit_job(str(self.project_path))
+        job = submitted["data"]["job"]
+        job_id = job["id"]
+        run_dir = Path(job["run_dir"])
+        project = load_yaml(self.project_path)
+        project_dir = run_dir / execution_identifier(project["project"]["name"])
+        data_dir = project_dir / "data"
+        preprocessing_dir = project_dir / "results" / "preprocessing"
+        first_level_dir = project_dir / "results" / "firstlevel" / "SBC_01"
+        data_dir.mkdir(parents=True)
+        preprocessing_dir.mkdir(parents=True)
+        first_level_dir.mkdir(parents=True)
+        (data_dir / "ROI_Subject001_Session001.mat").write_bytes(b"roi")
+        (preprocessing_dir / "vvPCeig_Subject001_Condition001.mat").write_bytes(b"pca")
+        (first_level_dir / "BETA_Subject001_Condition001_Source001.nii").write_bytes(b"beta")
+        (run_dir / "matlab_stdout.log").write_text("RUNNING ANALYSIS STEP\n", encoding="utf-8")
+        self.service.store.update(job_id, "running")
+
+        response = self.service.get_job_progress(job_id)
+        self.assertTrue(response["ok"], response["errors"])
+        progress = response["data"]["progress"]
+        self.assertEqual(progress["approximate_percent"], 75)
+        self.assertEqual(progress["subjects"]["total"], 1)
+        self.assertEqual(progress["subjects"]["active_subject_ids"], ["sub-001"])
+        self.assertEqual(
+            progress["subjects"]["items"][0]["highest_completed_stage"], "first_level"
+        )
+        self.assertEqual(
+            [(item["name"], item["completed"], item["total"]) for item in progress["stages"]],
+            [
+                ("preprocessing", 1, 1),
+                ("denoising", 1, 1),
+                ("first_level", 1, 1),
+                ("second_level", 0, 1),
+            ],
+        )
+        serialized = json.dumps(progress)
+        self.assertNotIn(str(self.dataset), serialized)
+        self.assertIsNone(progress["scientific_interpretation"]["automatic_decision"])
 
     def test_worker_failure_is_persisted(self) -> None:
         submitted = self.service.submit_job(str(self.project_path))

@@ -21,6 +21,7 @@ conn-pilot = "conn_pilot.cli:main"
 conn-pilot-mcp = "conn_pilot.mcp_server:main"
 conn-pilot-control = "conn_pilot.control_plane:main"
 conn-pilot-worker = "conn_pilot.distributed_worker:main"
+conn-pilot-monitor = "conn_pilot.worker_dashboard:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

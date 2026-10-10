@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "conn-pilot": {
+      "type": "http",
+      "url": "https://control-plane-production-0adf.up.railway.app/mcp"
+    }
+  }
+}

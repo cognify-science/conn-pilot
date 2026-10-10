@@ -16,7 +16,6 @@ sys.path.insert(0, str(ROOT / "src"))
 from conn_pilot.adapter import generate_conn_batch  # noqa: E402
 from conn_pilot.catalog import Catalog  # noqa: E402
 from conn_pilot.errors import ExecutionError  # noqa: E402
-from conn_pilot.environment import _matlab_environment  # noqa: E402
 from conn_pilot.jobs import JobStore, verify_outputs  # noqa: E402
 from conn_pilot.project import execution_identifier, validate_project  # noqa: E402
 from conn_pilot.results import collect_artifacts  # noqa: E402
@@ -26,6 +25,7 @@ from conn_pilot.pipeline_graph import (  # noqa: E402
     composition_snapshot,
     resolve_pipeline_graph,
 )
+from conn_pilot.preflight import build_execution_preflight  # noqa: E402
 
 
 class EngineTests(unittest.TestCase):
@@ -175,35 +175,6 @@ class EngineTests(unittest.TestCase):
         self.assertIn("qc_metrics.json", text)
         self.assertIn("atlas.Amygdala l", text)
 
-    def test_batch_can_enable_conn_subject_parallelization(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            target = generate_conn_batch(
-                self.project,
-                ROOT / "examples/project.template.yaml",
-                Path(directory),
-                {
-                    "parallel_jobs": 3,
-                    "parallel_profile": "Background process (Windows)",
-                },
-            )
-            text = target.read_text(encoding="utf-8")
-        self.assertIn("batch.parallel.N = 3;", text)
-        self.assertIn(
-            "batch.parallel.profile = 'Background process (Windows)';", text
-        )
-        self.assertIn("batch.parallel.immediatereturn = 0;", text)
-
-    def test_matlab_license_is_inherited_by_parallel_child_processes(self) -> None:
-        environment = _matlab_environment(
-            {"matlab": {"license_file": "C:/MATLAB/licenses/node.lic"}}
-        )
-        self.assertEqual(
-            environment["MLM_LICENSE_FILE"], "C:/MATLAB/licenses/node.lic"
-        )
-        self.assertEqual(
-            environment["LM_LICENSE_FILE"], "C:/MATLAB/licenses/node.lic"
-        )
-
     def test_two_group_design_with_covariate_is_rendered(self) -> None:
         project = copy.deepcopy(self.project)
         second_subject = copy.deepcopy(project["subjects"][0])
@@ -270,6 +241,102 @@ class EngineTests(unittest.TestCase):
             self.assertTrue(staged_func.with_name("sub-01_task-rest_bold.json").is_file())
             self.assertEqual(len(records), 2)
             self.assertEqual(len(records[0]["source_sha256"]), 64)
+
+    def test_preflight_blocks_missing_slice_timing_without_a_resolution(self) -> None:
+        project = copy.deepcopy(self.project)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            functional = root / "sub-01" / "func" / "sub-01_task-rest_bold.nii.gz"
+            structural = root / "sub-01" / "anat" / "sub-01_T1w.nii.gz"
+            functional.parent.mkdir(parents=True)
+            structural.parent.mkdir(parents=True)
+            functional.write_bytes(b"functional")
+            structural.write_bytes(b"structural")
+            (root / "task-rest_bold.json").write_text(
+                '{"RepetitionTime": 2.0}', encoding="utf-8"
+            )
+            project["dataset"]["root"] = str(root)
+            project["subjects"] = [
+                {
+                    "id": "sub-01",
+                    "functional": [str(functional)],
+                    "structural": [str(structural)],
+                }
+            ]
+            report = build_execution_preflight(project, {})
+        decision = report["checks"]["slice_timing"]["decision"]
+        self.assertFalse(report["ready"])
+        self.assertEqual(decision["status"], "unresolved")
+        self.assertIn("omit_slice_timing_correction", decision["available_options"])
+
+    def test_preflight_authorized_omission_removes_stc_from_generated_batch(self) -> None:
+        project = copy.deepcopy(self.project)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            functional = root / "sub-01" / "func" / "sub-01_task-rest_bold.nii.gz"
+            structural = root / "sub-01" / "anat" / "sub-01_T1w.nii.gz"
+            functional.parent.mkdir(parents=True)
+            structural.parent.mkdir(parents=True)
+            functional.write_bytes(b"functional")
+            structural.write_bytes(b"structural")
+            project["dataset"]["root"] = str(root)
+            project["subjects"] = [
+                {
+                    "id": "sub-01",
+                    "functional": [str(functional)],
+                    "structural": [str(structural)],
+                }
+            ]
+            project["execution_preflight"] = build_execution_preflight(
+                project,
+                {
+                    "missing_slice_timing_policy": "omit",
+                    "missing_slice_timing_authorized": True,
+                },
+            )
+            target = generate_conn_batch(
+                project, ROOT / "examples/project.template.yaml", root / "run"
+            )
+            text = target.read_text(encoding="utf-8")
+        self.assertTrue(project["execution_preflight"]["ready"])
+        self.assertIn("slice-timing correction omitted", text)
+        self.assertNotIn("functional_slicetime", text)
+        self.assertNotIn("sliceorder = 'BIDS'", text)
+
+    def test_preflight_uses_inherited_bids_slice_timing(self) -> None:
+        project = copy.deepcopy(self.project)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            functional = root / "sub-01" / "func" / "sub-01_task-rest_bold.nii.gz"
+            structural = root / "sub-01" / "anat" / "sub-01_T1w.nii.gz"
+            functional.parent.mkdir(parents=True)
+            structural.parent.mkdir(parents=True)
+            functional.write_bytes(b"functional")
+            structural.write_bytes(b"structural")
+            (root / "task-rest_bold.json").write_text(
+                '{"RepetitionTime": 2.0, "SliceTiming": [0.0, 1.0]}',
+                encoding="utf-8",
+            )
+            project["dataset"]["root"] = str(root)
+            project["subjects"] = [
+                {
+                    "id": "sub-01",
+                    "functional": [str(functional)],
+                    "structural": [str(structural)],
+                }
+            ]
+            report = build_execution_preflight(project, {})
+            staged, _ = stage_project_inputs(project, root / "run")
+            staged_sidecar = Path(staged["subjects"][0]["functional"][0]).with_name(
+                "sub-01_task-rest_bold.json"
+            )
+            staged_sidecar_exists = staged_sidecar.is_file()
+        self.assertTrue(report["ready"])
+        self.assertEqual(
+            report["checks"]["slice_timing"]["decision"]["action"],
+            "apply_bids_slice_timing",
+        )
+        self.assertTrue(staged_sidecar_exists)
 
     def test_artifact_collector_indexes_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

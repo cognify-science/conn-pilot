@@ -34,6 +34,9 @@ class PluginPackageTests(unittest.TestCase):
         self.assertEqual(
             portable_mcp["mcpServers"]["conn-pilot"]["type"], "streamable-http"
         )
+        auth = portable_mcp["mcpServers"]["conn-pilot"]["extensions"]["com.openai"]["auth"]
+        self.assertEqual(auth["type"], "oauth")
+        self.assertEqual(auth["client"]["mode"], "dcr")
 
     def test_marketplace_points_to_the_packaged_plugin(self) -> None:
         marketplace = json.loads(
@@ -41,7 +44,7 @@ class PluginPackageTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(marketplace["name"], "conn-pilot-private")
+        self.assertEqual(marketplace["name"], "conn-pilot-research-preview")
         entry = marketplace["plugins"][0]
         self.assertEqual(entry["name"], "conn-pilot")
         source = (ROOT / entry["source"]["path"]).resolve()
@@ -57,6 +60,7 @@ class PluginPackageTests(unittest.TestCase):
                 "design-conn-experiment",
                 "review-conn-results",
                 "run-conn-analysis",
+                "setup-conn-pilot",
             },
         )
         for path in skill_dirs:

@@ -52,8 +52,8 @@ job vigente.
 Al finalizar, el investigador puede revisar imágenes y métricas por sujeto,
 registrar `accept`, `exclude` o `needs_review`, recalcular el segundo nivel si
 cambió la muestra, registrar la decisión científica y exportar el paquete
-reproducible. Todo el recorrido se realiza desde Codex y las imágenes se abren
-mediante enlaces firmados temporales devueltos por el MCP.
+reproducible. El portal visual es opcional; el recorrido completo también puede
+realizarse desde Codex.
 
 ## Alcance actual
 
@@ -68,5 +68,5 @@ de datasets propios y la composición libre fuera de plantillas validadas perman
 del alcance de este piloto.
 
 Antes de modificar un proyecto, Codex puede mostrar qué nodos conservarían sus
-resultados y desde qué etapa sería necesario recalcular. Codex puede consultar
-el grafo modular que produjo los resultados revisados.
+resultados y desde qué etapa sería necesario recalcular. El portal muestra el
+grafo modular que produjo los resultados revisados.
