@@ -6,6 +6,8 @@ publishing credentials, host addresses, local paths, or infrastructure runbooks.
 ## Method and execution
 
 - [Detailed scientific module reference](science/scientific-modules.md)
+- [Preloaded public benchmark datasets](science/preloaded-datasets.md)
+- [Public benchmark validation — October 2026](science/benchmark-validation-2026-10.md)
 - [Architecture and trust boundaries](science/architecture.md)
 - [Pipeline construction and lifecycle](science/pipeline-lifecycle.md)
 - [Parameter selection](science/parameter-selection.md)

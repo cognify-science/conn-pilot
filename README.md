@@ -34,6 +34,8 @@ outside the executable contract.
 | Researcher | [Researcher quickstart](docs/researcher-quickstart.md) |
 | Scientist evaluating the method | [Scientific documentation map](docs/README.md) |
 | Scientist auditing every module | [Detailed scientific module reference](docs/science/scientific-modules.md) |
+| Scientist reviewing available benchmarks | [Preloaded public benchmark datasets](docs/science/preloaded-datasets.md) |
+| Scientist reviewing validation performance | [Public benchmark validation](docs/science/benchmark-validation-2026-10.md) |
 | AI assistant configuring access | [AI-assisted setup](docs/integrations/ai-assisted-setup.md) |
 | ChatGPT or Codex user | [OpenAI clients](docs/integrations/openai-clients.md) |
 | Claude or Claude Code user | [Claude clients](docs/integrations/claude.md) |

@@ -15,6 +15,9 @@ class PublicDocumentationTests(unittest.TestCase):
         required = {
             "docs/science/architecture.md",
             "docs/science/scientific-modules.md",
+            "docs/science/preloaded-datasets.md",
+            "docs/science/benchmark-validation-2026-10.md",
+            "docs/science/data/benchmark-results-2026-10.json",
             "docs/science/pipeline-lifecycle.md",
             "docs/science/parameter-selection.md",
             "docs/science/evidence-corpus.md",

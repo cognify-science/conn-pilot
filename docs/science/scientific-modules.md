@@ -75,6 +75,11 @@ The output is a project specification. It is a scientific intent, not yet a job.
 Unsupported fields, designs, regions, or values are rejected instead of being
 translated approximately.
 
+The research-preview registrations and their scientific limits are listed in
+[Preloaded public benchmark datasets](preloaded-datasets.md). The runtime
+`list_datasets` response remains authoritative for the datasets visible to a
+particular researcher.
+
 ## 2. Dataset inspection and acquisition preflight
 
 The dataset module inspects registered raw BIDS inputs and creates a path-free
