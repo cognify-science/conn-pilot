@@ -5,7 +5,7 @@ import json
 import re
 import unittest
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +18,8 @@ class PublicDocumentationTests(unittest.TestCase):
             "SCIENTIST_CONTEXT.md",
             "CHANGELOG.md",
             "docs/reference/mcp-tools.md",
+            "docs/reference/conn-official-sources.md",
+            "docs/reference/conn-official-sources.json",
             "docs/science/statistical-methods.md",
             "docs/science/qc-manual.md",
             "docs/science/worked-example.md",
@@ -71,6 +73,7 @@ class PublicDocumentationTests(unittest.TestCase):
         ]
         paths.extend((ROOT / "docs").rglob("*.md"))
         paths.extend((ROOT / "docs" / "science" / "data").glob("*.json"))
+        paths.extend((ROOT / "docs" / "reference").glob("*.json"))
         paths.extend((ROOT / "plugin" / "conn-pilot").glob("*.json"))
         forbidden = re.compile(r"C:\\Users\\|D:\\ConnPilot|100\.76\.|192\.168\.", re.I)
         findings = []
@@ -98,6 +101,28 @@ class PublicDocumentationTests(unittest.TestCase):
         self.assertTrue(tools)
         self.assertEqual(documented, tools)
         self.assertIn(f"exposes {len(tools)} tools", reference)
+
+    def test_official_conn_consultation_index_matches_guide(self) -> None:
+        directory = ROOT / "docs" / "reference"
+        registry = json.loads((directory / "conn-official-sources.json").read_text(encoding="utf-8"))
+        guide = (directory / "conn-official-sources.md").read_text(encoding="utf-8")
+        definitions = dict(re.findall(r"^\[([^\]]+)\]: (https://\S+)$", guide, re.M))
+        citations = set(re.findall(r"\]\[([^\]]+)\]", guide))
+        self.assertTrue(citations)
+        self.assertLessEqual(citations, definitions.keys())
+        sources = registry["sources"]
+        self.assertEqual(len({source["id"] for source in sources}), len(sources))
+        self.assertEqual({source["id"]: source["url"] for source in sources}, definitions)
+        allowed_hosts = {"web.conn-toolbox.org", "github.com", "www.nitrc.org", "doi.org"}
+        for source in sources:
+            parsed = urlparse(source["url"])
+            self.assertEqual(parsed.scheme, "https")
+            self.assertIn(parsed.hostname, allowed_hosts)
+            self.assertTrue(source["topics"])
+            self.assertTrue(source["version_relation"])
+            if source["kind"] == "released_source":
+                self.assertEqual(source["commit"], registry["upstream"]["reference_commit"])
+                self.assertIn(f"/{source['commit']}/", source["url"])
 
     def test_public_documentation_relative_links_resolve(self) -> None:
         paths = [ROOT / "README.md", ROOT / "SCIENTIST_CONTEXT.md", ROOT / "CHANGELOG.md"]

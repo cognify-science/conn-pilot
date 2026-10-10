@@ -55,6 +55,7 @@ effect.
 
 | Question | Authoritative entry point |
 | --- | --- |
+| Where should I verify CONN algorithms, defaults, and methodological references? | [Official CONN source guide](docs/reference/conn-official-sources.md) and [machine-readable index](docs/reference/conn-official-sources.json) |
 | What modules exist and how do they interact? | [`docs/science/scientific-modules.md`](docs/science/scientific-modules.md) |
 | What exactly happens to the images and time series? | [`docs/science/statistical-methods.md`](docs/science/statistical-methods.md) |
 | What pipelines and designs are supported? | [`docs/science/pipeline-lifecycle.md`](docs/science/pipeline-lifecycle.md) and `catalog/` |
@@ -87,6 +88,11 @@ should call read-only tools in this order:
 
 Never invent a dataset, seed, paper, result, parameter, or worker state from the
 documentation. Cite the exact runtime record and its version.
+
+For underlying CONN behavior, use the [official source guide](docs/reference/conn-official-sources.md).
+It distinguishes released code, mutable official documentation, primary
+methodology, Pilot's supported contract, and actual execution evidence. Its
+source identifiers are consultation references, not selector evidence IDs.
 
 ## Current validation conclusion
 

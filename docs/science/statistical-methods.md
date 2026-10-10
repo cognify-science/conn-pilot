@@ -176,3 +176,9 @@ To reconstruct an analysis, inspect in this order:
 
 The [MCP tool reference](../reference/mcp-tools.md) maps those questions to the
 read-only calls available to an authenticated researcher.
+
+For the underlying toolbox's algorithms, inherited defaults, and primary
+methodological citations, use the [official CONN source guide](../reference/conn-official-sources.md).
+It supplies topic-specific official documentation and CONN 25.b source links;
+the executed batch and software record are still required to establish which
+options applied to a particular study.

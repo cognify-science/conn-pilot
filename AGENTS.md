@@ -4,6 +4,14 @@ Read `SCIENTIST_CONTEXT.md` first. It is the scientific entry point and maps
 common questions to the current methods, evidence, validation, and runtime
 sources. Then read the relevant versioned contracts before making a claim.
 
+When explaining underlying CONN algorithms or defaults, consult
+`docs/reference/conn-official-sources.md` and its JSON index. Cite official
+documentation or primary papers for methodology and release-pinned code for
+exact implementation. Verify the runtime version and generated batch for an
+executed setting. Do not equate upstream capabilities with Pilot support,
+mutable `master` with a validated release, or these source IDs with corpus
+evidence IDs.
+
 CONN Pilot is research software for reproducible resting-state functional
 connectivity workflows. Preserve the distinction between technical completion,
 subject-level QC, statistical results, and scientific interpretation.

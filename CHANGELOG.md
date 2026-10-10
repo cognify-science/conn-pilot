@@ -12,6 +12,8 @@
 
 ### Validation additions — October 2026
 
+- Added an official CONN source guide, machine-readable consultation index,
+  release-pinned implementation links, and citation instructions for AI clients.
 - Completed six full benchmark analyses after a three-participant smoke gate.
 - Reviewed 55 unique participants and recalculated clinical second-level models
   for the final QC samples.

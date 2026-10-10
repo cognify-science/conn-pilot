@@ -1,0 +1,564 @@
+{
+  "schema_version": "1.0",
+  "verified_on": "2026-10-10",
+  "purpose": "Consultation directory for researchers and AI assistants; not the executable evidence corpus.",
+  "upstream": {
+    "repository": "https://github.com/alfnie/conn",
+    "official_provenance_url": "https://web.conn-toolbox.org/resources/conn-development",
+    "default_branch": "master",
+    "reference_release": "v25b",
+    "reference_commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f",
+    "release_published_at": "2026-02-22T18:46:27Z",
+    "installed_file_identity_verified": false
+  },
+  "caveats": [
+    "The upstream reference commit is not proof of installed worker file identity.",
+    "Official web pages and master are mutable; verify the relevant release before citing behavior.",
+    "The v25b source tree includes a v22-named PDF; the current manual portal advertises v25. Check the document version.",
+    "Toolbox capabilities do not imply CONN Pilot contract support.",
+    "Source identifiers here are not CONN Pilot evidence_id values and do not modify parameter decisions.",
+    "Contextual support discussions are not universally applicable methodological recommendations."
+  ],
+  "sources": [
+    {
+      "id": "development",
+      "title": "Official repository provenance",
+      "url": "https://web.conn-toolbox.org/resources/conn-development",
+      "kind": "official_documentation",
+      "topics": [
+        "provenance"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "repository",
+      "title": "CONN source repository",
+      "url": "https://github.com/alfnie/conn",
+      "kind": "upstream_repository",
+      "topics": [
+        "source",
+        "versions"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "release25b",
+      "title": "CONN25b release",
+      "url": "https://github.com/alfnie/conn/releases/tag/v25b",
+      "kind": "upstream_release",
+      "topics": [
+        "versions"
+      ],
+      "version_relation": "upstream_v25b_release"
+    },
+    {
+      "id": "manual",
+      "title": "CONN manual and references portal",
+      "url": "https://web.conn-toolbox.org/resources/conn-manual",
+      "kind": "official_documentation",
+      "topics": [
+        "manual",
+        "citations"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "batch",
+      "title": "CONN batch reference",
+      "url": "https://web.conn-toolbox.org/resources/conn-manual/conn_batch",
+      "kind": "official_documentation",
+      "topics": [
+        "batch",
+        "parameters",
+        "defaults"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "module",
+      "title": "CONN module reference",
+      "url": "https://web.conn-toolbox.org/resources/conn-manual/conn_module",
+      "kind": "official_documentation",
+      "topics": [
+        "modules"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "methods",
+      "title": "Functional-connectivity methods chapters",
+      "url": "https://web.conn-toolbox.org/fmri-methods",
+      "kind": "official_documentation",
+      "topics": [
+        "methods"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "preprocessing",
+      "title": "Preprocessing methods",
+      "url": "https://web.conn-toolbox.org/fmri-methods/preprocessing-pipeline",
+      "kind": "official_documentation",
+      "topics": [
+        "preprocessing",
+        "ART",
+        "SPM"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "denoising",
+      "title": "Denoising methods and QC",
+      "url": "https://web.conn-toolbox.org/fmri-methods/denoising-pipeline",
+      "kind": "official_documentation",
+      "topics": [
+        "denoising",
+        "aCompCor",
+        "GSR",
+        "QC"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "connectivity",
+      "title": "Connectivity measures",
+      "url": "https://web.conn-toolbox.org/fmri-methods/connectivity-measures",
+      "kind": "official_documentation",
+      "topics": [
+        "connectivity",
+        "scope"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "seed",
+      "title": "Seed-based connectivity",
+      "url": "https://web.conn-toolbox.org/fmri-methods/connectivity-measures/seed-based",
+      "kind": "official_documentation",
+      "topics": [
+        "seed-to-voxel",
+        "first-level"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "roi",
+      "title": "ROI-to-ROI connectivity",
+      "url": "https://web.conn-toolbox.org/fmri-methods/connectivity-measures/roi-to-roi",
+      "kind": "official_documentation",
+      "topics": [
+        "ROI-to-ROI",
+        "first-level"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "glm",
+      "title": "General linear model",
+      "url": "https://web.conn-toolbox.org/fmri-methods/general-linear-model",
+      "kind": "official_documentation",
+      "topics": [
+        "GLM",
+        "contrasts",
+        "second-level"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "inference",
+      "title": "Cluster-level inferences",
+      "url": "https://web.conn-toolbox.org/fmri-methods/cluster-level-inferences",
+      "kind": "official_documentation",
+      "topics": [
+        "inference",
+        "multiplicity",
+        "permutations"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "reporting",
+      "title": "Describing CONN analyses",
+      "url": "https://web.conn-toolbox.org/resources/describing-conn-analyses",
+      "kind": "official_documentation",
+      "topics": [
+        "reporting",
+        "citations"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "parallel",
+      "title": "CONN parallelization documentation",
+      "url": "https://web.conn-toolbox.org/resources/hpc-configuration",
+      "kind": "official_documentation",
+      "topics": [
+        "parallelization"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "tutorials",
+      "title": "CONN tutorials",
+      "url": "https://web.conn-toolbox.org/resources/conn-tutorials",
+      "kind": "official_documentation",
+      "topics": [
+        "learning"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "support",
+      "title": "Official support directory",
+      "url": "https://web.conn-toolbox.org/resources/support",
+      "kind": "official_documentation",
+      "topics": [
+        "support"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "forum",
+      "title": "CONN NITRC support forum",
+      "url": "https://www.nitrc.org/forum/forum.php?forum_id=1144",
+      "kind": "contextual_support",
+      "topics": [
+        "support"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "issues",
+      "title": "CONN upstream issues",
+      "url": "https://github.com/alfnie/conn/issues",
+      "kind": "contextual_support",
+      "topics": [
+        "support"
+      ],
+      "version_relation": "mutable_consult_and_check_version"
+    },
+    {
+      "id": "src-batch",
+      "title": "conn_batch.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_batch.m",
+      "kind": "released_source",
+      "topics": [
+        "batch",
+        "defaults"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-importbids",
+      "title": "conn_importbids.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_importbids.m",
+      "kind": "released_source",
+      "topics": [
+        "BIDS"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-bidsdir",
+      "title": "conn_bidsdir.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_bidsdir.m",
+      "kind": "released_source",
+      "topics": [
+        "BIDS"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-preproc",
+      "title": "conn_setup_preproc.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_setup_preproc.m",
+      "kind": "released_source",
+      "topics": [
+        "preprocessing",
+        "SPM"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-art",
+      "title": "conn_art.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_art.m",
+      "kind": "released_source",
+      "topics": [
+        "ART",
+        "motion"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-process",
+      "title": "conn_process.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_process.m",
+      "kind": "released_source",
+      "topics": [
+        "processing",
+        "denoising",
+        "connectivity"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-filter",
+      "title": "conn_filter.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_filter.m",
+      "kind": "released_source",
+      "topics": [
+        "filtering"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-rois",
+      "title": "rois",
+      "url": "https://github.com/alfnie/conn/tree/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/rois",
+      "kind": "released_source",
+      "topics": [
+        "ROIs",
+        "atlases"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-design",
+      "title": "conn_designmatrix.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_designmatrix.m",
+      "kind": "released_source",
+      "topics": [
+        "design"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-glm",
+      "title": "conn_glm.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_glm.m",
+      "kind": "released_source",
+      "topics": [
+        "GLM",
+        "inference"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-fdr",
+      "title": "conn_fdr.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_fdr.m",
+      "kind": "released_source",
+      "topics": [
+        "multiplicity"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-randomise",
+      "title": "conn_randomise.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_randomise.m",
+      "kind": "released_source",
+      "topics": [
+        "permutations"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-qaplots",
+      "title": "conn_qaplots.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_qaplots.m",
+      "kind": "released_source",
+      "topics": [
+        "QC"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-qascores",
+      "title": "conn_qascores.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_qascores.m",
+      "kind": "released_source",
+      "topics": [
+        "QC"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-reference",
+      "title": "conn_reference.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_reference.m",
+      "kind": "released_source",
+      "topics": [
+        "reporting",
+        "citations"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-reference-denoising",
+      "title": "conn_reference_denoising.txt",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_reference_denoising.txt",
+      "kind": "released_source",
+      "topics": [
+        "reporting",
+        "denoising"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-reference-preproc",
+      "title": "conn_reference_preproc.txt",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_reference_preproc.txt",
+      "kind": "released_source",
+      "topics": [
+        "reporting",
+        "preprocessing"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-reference-firstlevel",
+      "title": "conn_reference_firstlevel.txt",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_reference_firstlevel.txt",
+      "kind": "released_source",
+      "topics": [
+        "reporting",
+        "first-level"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-reference-secondlevel",
+      "title": "conn_reference_secondlevel.txt",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_reference_secondlevel.txt",
+      "kind": "released_source",
+      "topics": [
+        "reporting",
+        "second-level"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-reference-qualitycontrol",
+      "title": "conn_reference_qualitycontrol.txt",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_reference_qualitycontrol.txt",
+      "kind": "released_source",
+      "topics": [
+        "reporting",
+        "QC"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-jobs",
+      "title": "conn_jobmanager.m",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/conn_jobmanager.m",
+      "kind": "released_source",
+      "topics": [
+        "parallelization"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "src-changelog",
+      "title": "change.log",
+      "url": "https://github.com/alfnie/conn/blob/87e4f24988cf3a9bf7aa81f41c705a2baf68540f/change.log",
+      "kind": "released_source",
+      "topics": [
+        "versions"
+      ],
+      "version_relation": "pinned_upstream_v25b",
+      "commit": "87e4f24988cf3a9bf7aa81f41c705a2baf68540f"
+    },
+    {
+      "id": "toolbox-paper",
+      "title": "Whitfield-Gabrieli & Nieto-Castanon (2012): CONN toolbox",
+      "url": "https://doi.org/10.1089/brain.2012.0073",
+      "kind": "primary_reference",
+      "topics": [
+        "toolbox"
+      ],
+      "version_relation": "publication_not_runtime_setting",
+      "doi": "10.1089/brain.2012.0073"
+    },
+    {
+      "id": "handbook",
+      "title": "Nieto-Castanon (2020): functional-connectivity methods handbook",
+      "url": "https://doi.org/10.56441/hilbertpress.2207.6598",
+      "kind": "primary_reference",
+      "topics": [
+        "methods"
+      ],
+      "version_relation": "publication_not_runtime_setting",
+      "doi": "10.56441/hilbertpress.2207.6598"
+    },
+    {
+      "id": "compcor-paper",
+      "title": "Behzadi et al. (2007): CompCor",
+      "url": "https://doi.org/10.1016/j.neuroimage.2007.04.042",
+      "kind": "primary_reference",
+      "topics": [
+        "aCompCor",
+        "denoising"
+      ],
+      "version_relation": "publication_not_runtime_setting",
+      "doi": "10.1016/j.neuroimage.2007.04.042"
+    },
+    {
+      "id": "anticorrelations-paper",
+      "title": "Chai et al. (2012): anticorrelations without GSR",
+      "url": "https://doi.org/10.1016/j.neuroimage.2011.08.048",
+      "kind": "primary_reference",
+      "topics": [
+        "GSR",
+        "denoising"
+      ],
+      "version_relation": "publication_not_runtime_setting",
+      "doi": "10.1016/j.neuroimage.2011.08.048"
+    },
+    {
+      "id": "qc-paper",
+      "title": "Morfini et al. (2023): CONN QC procedures",
+      "url": "https://doi.org/10.3389/fnins.2023.1092125",
+      "kind": "primary_reference",
+      "topics": [
+        "QC"
+      ],
+      "version_relation": "publication_not_runtime_setting",
+      "doi": "10.3389/fnins.2023.1092125"
+    },
+    {
+      "id": "software25",
+      "title": "Nieto-Castanon & Whitfield-Gabrieli (2025): CONN Version 25",
+      "url": "https://doi.org/10.56441/hilbertpress.2538.3958",
+      "kind": "primary_reference",
+      "topics": [
+        "software-citation"
+      ],
+      "version_relation": "publication_not_runtime_setting",
+      "doi": "10.56441/hilbertpress.2538.3958"
+    }
+  ]
+}

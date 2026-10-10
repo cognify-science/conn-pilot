@@ -5,6 +5,12 @@ resting-state fMRI connectivity workflows. Read `SCIENTIST_CONTEXT.md`,
 `AGENTS.md`, `docs/README.md`, and the versioned contracts before proposing
 changes.
 
+Use `docs/reference/conn-official-sources.md` and its JSON index when explaining
+CONN. Cite the relevant official page, primary publication, or release-pinned
+source; check the actual runtime version and batch before asserting an executed
+default. Upstream features and consultation IDs do not establish Pilot support
+or a study's parameter provenance.
+
 Keep scientific decisions explicit and auditable. Separate execution status,
 subject QC, inferential statistics, and scientific conclusions. Do not add
 credentials, private infrastructure, local dataset paths, or source imaging data

@@ -31,6 +31,7 @@ runtime MCP evidence is required.
 - [Modular pipeline builder](modular-pipeline-builder.md)
 - [Resilient worker semantics](resilient-worker.md)
 - [MCP scientific tool reference](reference/mcp-tools.md)
+- [Official CONN sources by scientific topic](reference/conn-official-sources.md)
 
 ## Access through an AI client
 
@@ -54,6 +55,8 @@ runtime MCP evidence is required.
 
 The scientific statements in these pages can be checked against:
 
+- [official CONN consultation index](reference/conn-official-sources.json), with
+  release-pinned source links and primary methodological references;
 - pipeline contracts in `catalog/pipelines/`;
 - stage contracts in `catalog/stages/`;
 - tool and result schemas in `contracts/`;

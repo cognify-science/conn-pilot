@@ -35,6 +35,7 @@ outside the executable contract.
 | Researcher | [Researcher quickstart](docs/researcher-quickstart.md) |
 | Scientist evaluating the method | [Scientific documentation map](docs/README.md) |
 | Methodologist | [Implemented statistical methods](docs/science/statistical-methods.md) |
+| Scientist or AI verifying CONN itself | [Official CONN sources and citation protocol](docs/reference/conn-official-sources.md) |
 | QC reviewer | [Subject-level QC manual](docs/science/qc-manual.md) |
 | Scientist auditing every module | [Detailed scientific module reference](docs/science/scientific-modules.md) |
 | Scientist reviewing available benchmarks | [Preloaded public benchmark datasets](docs/science/preloaded-datasets.md) |
