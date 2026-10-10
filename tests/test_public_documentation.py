@@ -14,6 +14,7 @@ class PublicDocumentationTests(unittest.TestCase):
     def test_required_scientific_and_integration_guides_exist(self) -> None:
         required = {
             "docs/science/architecture.md",
+            "docs/science/scientific-modules.md",
             "docs/science/pipeline-lifecycle.md",
             "docs/science/parameter-selection.md",
             "docs/science/evidence-corpus.md",

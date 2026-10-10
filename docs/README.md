@@ -5,6 +5,7 @@ publishing credentials, host addresses, local paths, or infrastructure runbooks.
 
 ## Method and execution
 
+- [Detailed scientific module reference](science/scientific-modules.md)
 - [Architecture and trust boundaries](science/architecture.md)
 - [Pipeline construction and lifecycle](science/pipeline-lifecycle.md)
 - [Parameter selection](science/parameter-selection.md)

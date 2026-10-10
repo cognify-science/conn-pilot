@@ -24,5 +24,5 @@ consequence. The worker receives only a fully resolved execution contract.
 
 The worker publishes a path-free acquisition metadata inventory to the control
 plane. Codex or ChatGPT can use that inventory with the investigator's model to
-search literature and propose a cited resolution. Railway and the CONN worker do
-not require an OpenAI API key for this process.
+search literature and propose a cited resolution. The control service and CONN
+worker do not require a model-provider API key for this process.
