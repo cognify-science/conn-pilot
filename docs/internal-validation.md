@@ -1,46 +1,50 @@
-# Validación interna del piloto sandbox
+# Internal validation record
 
-Esta matriz define qué se prueba, la evidencia esperada y el criterio de salida.
-Las decisiones científicas sobre sujetos quedan siempre a cargo de un investigador.
+The initial sandbox validation used three participants and exercised execution,
+QC, sample changes, and reporting. It was followed by the October 2026 six-run
+public benchmark evaluation. The latter is documented in the
+[public scientific report](science/benchmark-validation-2026-10.md) and its
+[machine-readable aggregate record](science/data/benchmark-results-2026-10.json).
 
-| Caso | Evidencia | Criterio de aprobación | Estado |
-|---|---|---|---|
-| Ejecución sandbox completa | job remoto, manifiesto y hashes | estado `succeeded`, completitud técnica separada de QC | aprobado |
-| QC por sujeto | ART, registration, normalization, segmentation, denoising, tSNR y DVARS | métricas y láminas asociadas al sujeto y a `result_version` | aprobado para ejecuciones nuevas |
-| Cambio de muestra | recálculo MATLAB con máscara de sujetos | reutiliza primer nivel, crea salida versionada y no modifica versiones previas | aprobado mediante prueba real local |
-| Muestra insuficiente | prueba automática con un sujeto aceptado | bloquea segundo nivel con mensaje explícito | aprobado |
-| Exclusión sin motivo | prueba automática del control plane | rechaza la decisión | aprobado |
-| Resultado obsoleto | pruebas de versiones | rechaza decisiones sobre `result_version` o `sample_version` anterior | aprobado |
-| Caída o reinicio del worker | lease, heartbeat, supervisor y estado persistido | reinicia sin ejecutar dos workers y conserva el job recuperable | aprobado para piloto de una estación |
-| Aislamiento entre usuarios | pruebas de ownership | un usuario no puede leer ni alterar proyectos o jobs ajenos | aprobado |
-| Paquete reproducible | prueba ZIP | incluye PDF/HTML/JSON, decisiones, evidencia, imágenes/mapas y hashes | aprobado |
-| Flujo sin portal | herramientas MCP | literatura, ejecución, QC, recálculo, aceptación y paquete se completan desde Codex | aprobado por interfaz |
-| ROI-to-ROI modular | MATLAB R2023b, SPM25 y CONN 25.b sobre los derivados del sandbox | creó tres matrices `resultsROI_Subject*`, preparó segundo nivel y guardó `ROI.mat` | aprobado como prueba real del motor |
-| Grupos y covariable en ROI-to-ROI | dos grupos, covariable edad y contraste `[1 -1 0]` sobre el sandbox | CONN generó `ROI.mat` sin error | aprobado técnicamente; muestra insuficiente para inferencia científica |
-| Invalidación modular | comparación determinista de planes por nodo | cambiar semillas conserva inspección/preprocesamiento/denoising e invalida primer nivel y descendientes | aprobado por pruebas automáticas |
+## Implementation checks
 
-## Evidencia ejecutada
+The automated suite covers project and contrast validation, supported pipeline
+contracts, typed graph invalidation, evidence matching, identity isolation,
+subject decisions, stale second-level blocking, reporting, worker recovery, and
+artifact publication. The 111-test checkpoint preceding the documentation
+completion passed. Current GitHub CI is authoritative for each published commit.
 
-- Suite automática completa con `python -m unittest discover -s tests -q`.
-- Recálculo MATLAB/CONN real sobre `sub-10159` y `sub-10189`, conservando el
-  primer nivel y generando un `SPM.mat` independiente.
-- Generación CONN QA real para registration, normalization, segmentation,
-  ART y denoising sobre el sandbox.
-- Despliegue remoto con PostgreSQL, almacenamiento S3 y worker local supervisado.
-- Ejecución remota `df9e93c8add944578f62bf9e53f17bd8`, resultado
-  `sha256:fb54f0b029e03ac52716f4e099400119b21137c3fdf99a01f59b76320ec7f209`:
-  completó en 52 min 42 s, cargó 36 artefactos (46,700,689 bytes), incluyó
-  21 imágenes QC y publicó siete evidencias visuales por sujeto.
-- Prueba del portal temporal y su API sobre esa ejecución: HTTP 200 y job
-  correctamente acotado por token. Las 31 herramientas MCP quedaron publicadas.
-- `get_system_health` confirmó almacenamiento disponible, worker online y sistema
-  listo para ejecutar. El paquete reproducible rechazó su creación mientras el QC
-  científico permanecía incompleto, como exige el contrato.
+## Real toolbox checks
 
-## Límites conocidos
+MATLAB R2023b, SPM25, and CONN 25.b produced real seed-to-voxel and ROI-to-ROI
+outputs, native QA images, ART summaries, and group models. The initial remote
+seed run completed in 52 min 42 s and registered 36 selected artifacts, including
+21 QC images. The historical ROI run completed in 29 min 45.8 s and registered
+28 initial artifacts. These small runs established executable wiring.
 
-- El sandbox contiene tres sujetos y no representa toda la variabilidad de un
-  estudio real.
-- La incorporación de datasets propios está aplazada.
-- La prueba externa requiere decisiones de QC realizadas por los participantes;
-  no se simulan como decisiones científicas del sistema.
+The three-participant ROI test retained two participants after explicit QC
+review, recalculated the second level in a new version, and exported a 36-file
+package. Inference remained not evaluable for a scientific population claim.
+See the [historical record](validation/roi-to-roi-2026-10-03.md).
+
+## Full benchmark validation
+
+Six full analyses completed technically over WU120, fibromyalgia, and UCLA CNP.
+The evaluation reviewed 55 unique participants. Final samples were 15, 9+9, and
+8+8 respectively. The corrected clinical models were independently inspected for
+participant counts, design dimensions, rank, and residual degrees of freedom.
+All six final reproducibility package hashes are public in the benchmark report.
+
+A covariate-name reuse bug in the CONN Pilot second-level generator was corrected
+before final clinical interpretation. Older apparent-success calculations were
+superseded. This was a generator issue; it does not establish a defect in CONN
+Toolbox. The current implementation still requires reviewer inspection of the
+actual model rather than relying solely on a successful MATLAB exit.
+
+## Interpretation boundary
+
+The evidence establishes a traceable supported workflow and recovery on the
+validated worker setup. WU120 recovered the functional positive control. Small
+clinical subsets produced no corrected support for the restricted PCC questions.
+Internal validation does not establish general scientific validity, adequate
+clinical power, or autonomous source-paper replication.

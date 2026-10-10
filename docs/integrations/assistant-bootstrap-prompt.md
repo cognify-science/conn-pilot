@@ -3,7 +3,10 @@
 Copy the following text into an AI client after connecting CONN Pilot.
 
 > You are assisting a researcher through the authenticated CONN Pilot MCP
-> server. First inspect the available tools, my identity-scoped capabilities,
+> server. Treat `SCIENTIST_CONTEXT.md` in the public repository as the entry
+> point for stable scientific context, then follow its links to methods,
+> evidence, QC, validation, and tool semantics. First inspect the available
+> tools, my identity-scoped capabilities,
 > visible datasets, supported analysis families, evidence corpus version, and
 > worker health. Do not create, modify, submit, retry, or accept anything during
 > this initial inspection. Never ask me to paste passwords, one-time codes,
@@ -19,3 +22,8 @@ Copy the following text into an AI client after connecting CONN Pilot.
 > successful run as proof of a hypothesis. Prefer existing projects and jobs
 > over duplicates, and explain any unsupported request using the server's
 > contract.
+
+The repository explains stable release behavior; authenticated MCP reads explain
+current datasets, projects, jobs, and worker state. An assistant should state
+which source supports each answer and should never replace a missing runtime
+record with a guess from documentation.

@@ -3,20 +3,34 @@
 This documentation describes the scientific behavior of CONN Pilot without
 publishing credentials, host addresses, local paths, or infrastructure runbooks.
 
+Start with the repository-level [scientific context](../SCIENTIST_CONTEXT.md).
+It gives humans and AI assistants one question-to-source map and explains when
+runtime MCP evidence is required.
+
 ## Method and execution
 
 - [Detailed scientific module reference](science/scientific-modules.md)
+- [Implemented statistical methods](science/statistical-methods.md)
+- [Worked WU120 example](science/worked-example.md)
+- [Scientific report template](science/study-report-template.md)
 - [Preloaded public benchmark datasets](science/preloaded-datasets.md)
 - [Public benchmark validation — October 2026](science/benchmark-validation-2026-10.md)
 - [Architecture and trust boundaries](science/architecture.md)
 - [Pipeline construction and lifecycle](science/pipeline-lifecycle.md)
 - [Parameter selection](science/parameter-selection.md)
+- [Parameter-selector evaluation protocol](science/parameter-selector-evaluation.md)
 - [Evidence corpus](science/evidence-corpus.md)
+- [Evidence governance](science/evidence-governance.md)
 - [Quality control and inference](science/qc-and-inference.md)
+- [Subject-level QC review manual](science/qc-manual.md)
 - [Reproducibility outputs](science/reproducibility.md)
+- [Data governance, ethics, and licensing](science/data-governance.md)
+- [Scientific glossary](science/glossary.md)
+- [Scientific questions and claim boundaries](science/scientific-faq.md)
 - [Execution preflight](execution-preflight.md)
 - [Modular pipeline builder](modular-pipeline-builder.md)
 - [Resilient worker semantics](resilient-worker.md)
+- [MCP scientific tool reference](reference/mcp-tools.md)
 
 ## Access through an AI client
 
@@ -34,6 +48,7 @@ publishing credentials, host addresses, local paths, or infrastructure runbooks.
 - [External pilot protocol](external-pilot-protocol.md)
 - [Known technical debt](technical-debt.md)
 - [Security and data boundaries](security-and-data-boundaries.md)
+- [Release changelog](../CHANGELOG.md)
 
 ## Machine-readable sources
 

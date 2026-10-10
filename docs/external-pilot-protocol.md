@@ -1,54 +1,63 @@
-# Protocolo del piloto externo
+# External scientist pilot protocol
 
-## Objetivo
+## Objective
 
-Comprobar que un investigador puede completar el análisis sandbox desde Codex,
-con el portal como apoyo visual opcional, sin terminal ni edición de YAML.
+Check whether an independent scientist can use an authenticated MCP-capable
+assistant to inspect, review, and report a supported analysis without manually
+editing MATLAB or YAML. The optional visual portal may assist, but the scientific
+workflow must remain accessible through MCP.
 
-## Participantes y duración
+## Participants and sessions
 
-- 3 a 5 investigadores con experiencia en fMRI funcional.
-- Una sesión individual de 45 a 60 minutos.
-- El facilitador observa y toma tiempos, pero solo interviene si el participante
-  queda bloqueado durante más de tres minutos.
+- Three to five researchers with functional fMRI experience.
+- Individual sessions of 45-60 minutes.
+- Record the AI client, version, and institutional connection constraints.
+- A facilitator records times and intervenes only after a three-minute block.
+- Use an authorized prepared small result; do not wait for a new full run during
+  the session.
 
-## Tareas
+## Tasks
 
-1. Consultar la evidencia disponible para dos parámetros y explicar la elección.
-2. Abrir el análisis sandbox existente y confirmar su completitud técnica.
-3. Revisar las métricas y láminas de los tres sujetos.
-4. Registrar `accept`, `exclude` o `needs_review`; justificar toda exclusión.
-5. Solicitar un recálculo si la muestra cambió y verificar la nueva versión.
-6. Registrar la aceptación o rechazo científico de la versión vigente.
-7. Descargar el paquete reproducible y localizar el PDF, las decisiones, la
-   evidencia, las imágenes QC y los mapas del segundo nivel.
-8. Repetir al menos una consulta solo desde Codex para verificar que el portal
-   es opcional.
+1. Inspect current capabilities and explain two parameter choices using exact
+   evidence records and applicability limits.
+2. Open an existing supported result and distinguish technical completion from
+   scientific readiness.
+3. Inspect every participant's QC evidence, including missing/unreliable fields.
+4. Record explicit QC decisions with rationales; preserve uncertainty when needed.
+5. Request a new second level if the sample changes and verify the new version.
+6. Explain effect, inference, multiplicity, sample adequacy, and limitations;
+   record an attributable scientific decision when justified.
+7. Export the package and locate methods, decisions, evidence, QC, results, and hashes.
+8. Answer at least one scientific question using MCP and repository context
+   without relying on the optional portal.
 
-## Datos que se registran
+## Measurements
 
-- Tiempo total y por tarea.
-- Número de ayudas del facilitador, errores recuperables y bloqueos.
-- Pasos cuya redacción o estado resultaron ambiguos.
-- Confianza declarada de 1 a 5 para parámetros, QC, muestra y reproducibilidad.
-- Resultado de cada tarea y comentarios abiertos del participante.
+Record time per task and overall, facilitator interventions, errors, unresolved
+blocks, ambiguous language, and whether the participant correctly understands
+parameter provenance, QC, model currency, and inference. Collect confidence
+ratings from 1 to 5 plus open comments. High confidence without correct
+understanding is not success.
 
-No se registran credenciales, datos clínicos ni capturas con información ajena
-al sandbox.
+Do not collect credentials or unrelated participant information in the usability
+record. Use consented, authorized material and an isolated researcher identity.
 
-## Criterios de aceptación
+## Prespecified acceptance criteria
 
-- Al menos 4 de 5 participantes, o todos si participan 3 o 4, completan las
-  ocho tareas.
-- Mediana inferior a 45 minutos y no más de una ayuda por participante.
-- Ninguna exclusión queda sin justificación ni asociada a una versión distinta.
-- Todos pueden identificar la muestra efectiva y el estado del segundo nivel.
-- Al menos 80 % califica con 4 o 5 su confianza en el registro reproducible.
-- No se detecta acceso cruzado entre usuarios ni pérdida de decisiones.
+- At least four of five researchers, or all if only three or four participate,
+  complete all eight tasks.
+- Median completion time is below 45 minutes with at most one intervention per
+  participant.
+- Every exclusion has a rationale and correct version binding.
+- Every participant identifies the effective sample and current second-level state.
+- At least 80% rate reproducibility confidence as 4 or 5 and demonstrate correct
+  provenance retrieval.
+- No cross-identity disclosure or lost decision occurs.
+- No participant interprets technical success or significance alone as proof.
 
-## Cierre de cada sesión
+## Closure
 
-El facilitador exporta el paquete reproducible, registra los incidentes con
-severidad y elimina el enlace temporal del portal al expirar. Los hallazgos se
-clasifican en bloqueo, error científico, error de operación o mejora de uso. Un
-bloqueo o error científico detiene nuevas sesiones hasta su corrección.
+Export the session package and record each finding as a blocker, scientific
+error, operational error, or usability improvement. A blocker or scientific error
+requires correction before additional sessions. This protocol is prepared;
+independent external sessions have not yet established its success criteria.

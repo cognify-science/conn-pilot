@@ -1,27 +1,37 @@
-# Matriz de validación de CONN Pilot 0.1.0-beta.1
+# Validation matrix for CONN Pilot 0.1.0-beta.1
 
-La matriz registra el criterio de aceptación, la evidencia y la limitación de
-cada capacidad incluida en la beta sandbox. Un resultado técnico satisfactorio
-no implica aceptación científica ni confirmación de una hipótesis.
+Status is reported as of 10 October 2026. Each row distinguishes implementation
+or execution evidence from the remaining scientific claim.
 
-| Paso | Capacidad | Criterio de aceptación | Evidencia | Estado |
-|---|---|---|---|---|
-| 1 | Alcance trazable | cada capacidad pública tiene una prueba o una corrida registrada | esta matriz, contratos y 89 pruebas automáticas | aprobado |
-| 2 | ROI-to-ROI integral | CONN remoto finaliza, genera QC, admite revisión de muestra y paquete reproducible | job `81a1c3c97f42452dbaabf67b7ca7cd4b` y [registro de validación](validation/roi-to-roi-2026-10-03.md) | aprobado |
-| 3 | Matriz estadística | SBC y ROI-to-ROI producen planes válidos para una muestra y dos grupos con covariable | pruebas de motor y segundo nivel | aprobado por pruebas |
-| 4 | Parámetros y literatura | los siete parámetros tienen valor, evidencia versionada y decisión registrada | pruebas del resolutor y corpus | aprobado por pruebas |
-| 5 | QC y aceptación | completitud, calidad por sujeto, vigencia del segundo nivel y decisión científica son estados independientes | dos aceptaciones, una exclusión justificada, bloqueo y recálculo real | aprobado |
-| 6 | Auth0 y aislamiento | un sujeto no puede leer ni mutar recursos de otro | pruebas de ownership; endpoint devuelve 401, metadata Auth0 y scope `conn-pilot:use` | aprobado |
-| 7 | Reproducibilidad | el ZIP contiene informes, especificación, evidencia, decisiones, imágenes y hashes verificables | ZIP de 36 archivos; hash remoto y descarga local coinciden | aprobado |
-| 8 | Constructor modular | rechaza grafos incompatibles y fija un plan reproducible | pruebas de composición y catálogo versionado | aprobado por pruebas |
-| 9 | Plugin privado | manifiestos válidos, skills válidas, marketplace instalable y MCP autenticable | esquemas Agent Plugins, cuatro skills y `conn-pilot@conn-pilot-private` instalado en Codex | aprobado localmente |
-| 10 | Beta versionada | versión coherente, suite completa aprobada y protocolo externo listo | `0.1.0-beta.1`, suite de 89 pruebas, plugin y protocolo | aprobado |
+| Capability | Evidence | Established | Remaining limit |
+| --- | --- | --- | --- |
+| End-to-end pipelines | Six full benchmark analyses plus technical smoke runs | Supported SBC and RRC execution and artifacts | Other analysis families are unsupported |
+| Design generation | Engine and second-level tests; inspected clinical 18 x 2 and 16 x 2 models | Explicit group/covariate vectors and corrected sample masking | Actual rank and residual df are not automatic success gates |
+| Parameter provenance | Resolver tests and 42 benchmark decision records | Seven comparable baseline choices are traceable | Selector superiority and universal optimality are untested |
+| QC and sample currency | Participant review, version tests, and real recalculations | QC decisions are independent; stale models cannot be accepted | Missing metrics and residual motion still require scientific judgment |
+| Identity isolation | Ownership and authorization tests | Resources are scoped to the authenticated identity | Institutional governance remains necessary |
+| Reproducibility | Reporting tests, six final packages, published hashes | Exported records and file identities are auditable | Raw inputs and some large statistical maps are not bundled |
+| Modular builder | Catalog and graph tests | Compatible templates produce deterministic plans | Arbitrary compositions and cross-project stage reuse are unsupported |
+| Recovery | Worker/store tests and interruption recovery during benchmarks | Remote identity persists across local attempts | Exhaustive outage testing on multiple institutions is pending |
+| Client access | Portable MCP configuration and setup guides | Browser OAuth and client-specific setup documented | Compatibility depends on actual client/admin capabilities |
+| Scientific benchmark | Prospective WU120 positive control and corrected clinical models | WU120 functional control recovered | Clinical subsets remain inconclusive; source-paper replication not established |
 
-## Alcance aplazado
+The release checkpoint before these documentation additions passed 111 automated
+tests. Current CI, rather than that historical count, is authoritative for the
+present revision. Tests establish implementation consistency; they do not
+establish clinical validity or neurobiological truth.
 
-- Portal de revisión web.
-- Alta de datasets propios.
-- Validación deliberada de recuperación ante reinicios y cortes de red.
-- Composición libre con módulos fuera del catálogo validado.
-- Inferencia científica con potencia adecuada: el dataset sandbox de tres sujetos
-  valida el producto y su trazabilidad, no una conclusión neurocientífica.
+## Current versus historical evidence
+
+The [October full benchmark report](science/benchmark-validation-2026-10.md) is
+the current scientific performance record. The [3 October ROI validation](validation/roi-to-roi-2026-10-03.md)
+remains a historical three-participant technical test. Its sample and QC choices
+are not population-level exclusion rules.
+
+## Pending validation
+
+- Independent external scientist usability and interpretation sessions.
+- Frozen selector, expert, paper-specific, and CONN-reference comparator arms.
+- Prospective power or precision assessment for a substantive clinical question.
+- Dataset-specific governance for institutional inputs.
+- Automatic integrity checks of the actual second-level model matrix.

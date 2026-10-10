@@ -31,11 +31,16 @@ outside the executable contract.
 
 | Reader | Entry point |
 | --- | --- |
+| AI or scientist needing full context | [Scientific context](SCIENTIST_CONTEXT.md) |
 | Researcher | [Researcher quickstart](docs/researcher-quickstart.md) |
 | Scientist evaluating the method | [Scientific documentation map](docs/README.md) |
+| Methodologist | [Implemented statistical methods](docs/science/statistical-methods.md) |
+| QC reviewer | [Subject-level QC manual](docs/science/qc-manual.md) |
 | Scientist auditing every module | [Detailed scientific module reference](docs/science/scientific-modules.md) |
 | Scientist reviewing available benchmarks | [Preloaded public benchmark datasets](docs/science/preloaded-datasets.md) |
 | Scientist reviewing validation performance | [Public benchmark validation](docs/science/benchmark-validation-2026-10.md) |
+| Scientist learning the complete workflow | [WU120 worked example](docs/science/worked-example.md) |
+| Assistant developer | [MCP scientific tool reference](docs/reference/mcp-tools.md) |
 | AI assistant configuring access | [AI-assisted setup](docs/integrations/ai-assisted-setup.md) |
 | ChatGPT or Codex user | [OpenAI clients](docs/integrations/openai-clients.md) |
 | Claude or Claude Code user | [Claude clients](docs/integrations/claude.md) |
@@ -101,7 +106,10 @@ CONN Pilot separates four judgments that are often conflated:
 Parameter frequency in published papers is descriptive, not prescriptive. The
 system never treats a commonly reported value as automatically optimal. See
 [parameter selection](docs/science/parameter-selection.md) and
-[QC and inference](docs/science/qc-and-inference.md).
+[evidence governance](docs/science/evidence-governance.md). See
+[statistical methods](docs/science/statistical-methods.md), the
+[QC manual](docs/science/qc-manual.md), and [QC and inference](docs/science/qc-and-inference.md)
+for the complete interpretation boundary.
 
 ## Repository layout
 

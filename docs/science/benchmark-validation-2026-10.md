@@ -99,6 +99,12 @@ WU120 tSNR and DVARS were exported as zero in the initial summary. Those fields
 were treated as unavailable and were not compared with the clinical datasets.
 Zero must not be interpreted as a measured signal-quality value.
 
+The [QC manual](qc-manual.md) additionally documents a legacy exporter limitation:
+the contiguous-outlier summary is derived from regressor columns rather than
+acquisition-volume indices. Temporal contiguity therefore requires the visual
+ART trace or volume-indexed verification. The clinical QC decisions used combined
+visual inspection and must not be reproduced from that summary field alone.
+
 ## Second-level integrity correction
 
 The first four post-QC clinical recalculations appeared successful but still
@@ -253,4 +259,3 @@ for supported exploratory analyses. This validation does not establish autonomou
 paper replication or universal parameter optimality. Direct replication requires
 the complete cohorts, paper-specific covariates, atlases, contrasts, corrections,
 and statistical models, all frozen before result inspection.
-

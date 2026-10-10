@@ -1,5 +1,9 @@
 # Repository guidance for AI assistants
 
+Read `SCIENTIST_CONTEXT.md` first. It is the scientific entry point and maps
+common questions to the current methods, evidence, validation, and runtime
+sources. Then read the relevant versioned contracts before making a claim.
+
 CONN Pilot is research software for reproducible resting-state functional
 connectivity workflows. Preserve the distinction between technical completion,
 subject-level QC, statistical results, and scientific interpretation.
@@ -18,6 +22,8 @@ When helping a researcher:
   of commits, issues, logs, and conversations;
 - run the relevant tests after changing contracts, execution, QC, or reporting.
 
-The supported scientific scope is documented in `docs/science/`. Client setup is
-documented in `docs/integrations/`. The executable contracts remain authoritative
-for the current software version.
+The supported scientific scope is documented in `docs/science/`, and every MCP
+tool is described in `docs/reference/mcp-tools.md`. Client setup is documented in
+`docs/integrations/`. The executable contracts remain authoritative for the
+current software version; authenticated runtime calls remain authoritative for
+current resource and job state.

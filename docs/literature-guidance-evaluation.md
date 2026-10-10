@@ -1,5 +1,11 @@
 # Evaluación de orientación metodológica y literatura
 
+Este documento conserva el diagnóstico y plan de desarrollo de la primera capa
+de literatura. El estado científico actual, los límites y el protocolo de
+comparación están en [gobierno de evidencia](science/evidence-governance.md),
+[evaluación del selector](science/parameter-selector-evaluation.md) y
+[validación de benchmarks](science/benchmark-validation-2026-10.md).
+
 ## Conclusión
 
 La primera capa operativa ya consulta el corpus versionado mediante MCP. Railway
