@@ -1,0 +1,63 @@
+{
+  "schema_version": "conn_pilot_scientific_audit_contract_v1",
+  "output_schema": "conn_pilot_scientific_audit_v1",
+  "entry_points": [
+    "automatic completion audit",
+    "versioned second-level recalculation",
+    "read-only retrospective audit-results command"
+  ],
+  "identity": [
+    "sample_version",
+    "included_subject_ids",
+    "project_spec_sha256",
+    "model SHA-256",
+    "container result_version or second_level_output_version"
+  ],
+  "model_checks": [
+    "ordered subject selection",
+    "matrix values against frozen groups and covariates",
+    "full column rank",
+    "positive residual degrees of freedom",
+    "saved and computed df agreement",
+    "between-subject contrast",
+    "rest condition contrast",
+    "SBC saved input subject order",
+    "contrast and source coverage"
+  ],
+  "model_statuses": [
+    "passed",
+    "unverified_or_failed"
+  ],
+  "statistics": {
+    "supported": "univariate T models only",
+    "tails": "two_sided",
+    "correction": "FDR_BH",
+    "scope": "within_this_model_only",
+    "roi_family": "all_saved_targets_except_self_for_one_source",
+    "sbc_family": "all_voxels_in_saved_model_mask",
+    "roi_intervals": {
+      "level": 0.95,
+      "simultaneous": false,
+      "method": "OLS contrast estimate and residual variance from saved y, X, c"
+    },
+    "sbc_peak_interval": null,
+    "unsupported": [
+      "F/multivariate",
+      "multiple conditions",
+      "MAT v7.3",
+      "cluster/permutation inference"
+    ]
+  },
+  "policy": {
+    "automatic_subject_decisions": false,
+    "automatic_scientific_acceptance": false,
+    "exploratory_peaks_are_hypothesis_endpoints": false,
+    "historical_result_overwrite": false
+  },
+  "implementation": [
+    "src/conn_pilot/scientific_audit.py",
+    "src/conn_pilot/qc_evidence.py",
+    "src/conn_pilot/quality_report.py"
+  ],
+  "documentation": "docs/science/scientific-audit.md"
+}

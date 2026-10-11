@@ -21,6 +21,8 @@ class PublicDocumentationTests(unittest.TestCase):
             "docs/reference/conn-official-sources.md",
             "docs/reference/conn-official-sources.json",
             "docs/science/statistical-methods.md",
+            "docs/science/scientific-audit.md",
+            "contracts/scientific_audit.v1.json",
             "docs/science/qc-manual.md",
             "docs/science/worked-example.md",
             "docs/science/evidence-governance.md",

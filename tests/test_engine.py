@@ -170,7 +170,7 @@ class EngineTests(unittest.TestCase):
         self.assertIn("batch.Denoising.filter = [0.008 0.09];", text)
         self.assertIn("batch.Denoising.detrending = 1;", text)
         self.assertIn("batch.Denoising.despiking = 0;", text)
-        self.assertIn("conn_pilot_subject_qc_v1", text)
+        self.assertIn("conn_pilot_subject_qc_v2", text)
         self.assertIn("art_regression_timeseries_*.mat", text)
         self.assertIn("qc_metrics.json", text)
         self.assertIn("atlas.Amygdala l", text)

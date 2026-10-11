@@ -138,3 +138,6 @@ The source is currently provided for scientific evaluation under an all-rights-
 reserved research preview. Cite the software using [CITATION.cff](CITATION.cff).
 CONN Toolbox, MATLAB, and SPM are separate projects with their own licenses and
 citation requirements.
+
+Saved-model, QC availability and structured inference checks are described in the
+[automatic scientific audit guide](docs/science/scientific-audit.md).

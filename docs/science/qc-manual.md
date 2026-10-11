@@ -57,18 +57,19 @@ square intensity difference between consecutive volumes in that mask; the
 export reports its mean and maximum. These are preprocessed-image summaries,
 not guaranteed post-denoising or standardized DVARS measures.
 
-The current exporter searches for `swa*.nii`. A valid result with a different
-filename may therefore receive zero placeholders instead of measured tSNR or
-DVARS. Missing ART files can also produce zero placeholders. Confirm file
-availability before using these fields; the WU120 review treated its zero fields
-as unavailable.
+The new availability-aware exporter requires an unambiguous `swa*.nii` file for
+these image summaries. A missing or different filename produces `null` with
+`metric_availability=false`, rather than a zero placeholder. Verified ART
+measurements likewise carry availability and original-file hashes. Legacy
+numeric fields without availability are treated as unverified, including
+positive values, until the original evidence is reread.
 
-The legacy `longest_outlier_streak` computation operates over outlier-regressor
-columns of ART's `R` matrix. Those columns identify separate flagged scans and
-do not establish adjacency in acquisition time. Until the statistic is verified
-from volume-indexed flags, use the ART trace or nonzero row indices to determine
-the true longest contiguous run. The October clinical exclusions included
-visual temporal inspection; the exported streak alone must not justify them.
+The updated ART audit computes `longest_outlier_streak` from flagged **volume
+rows** in acquisition order. Older exports used regressor columns and cannot
+establish temporal adjacency. The October benchmark decisions remain historical:
+inspect original ART traces or run a separate retrospective audit before using
+their legacy metrics. See [automatic scientific audit](scientific-audit.md) for
+checks, version binding and unsupported cases.
 
 The parameter named `outlier_fd_threshold_mm` is passed to CONN's second ART
 threshold. Its ART displacement semantics must be checked against the toolbox

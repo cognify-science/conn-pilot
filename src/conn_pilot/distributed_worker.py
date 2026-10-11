@@ -533,6 +533,8 @@ class DistributedWorker:
         results = service.list_results(local_job_id)
         qc = service.get_qc_summary(local_job_id)
         run_dir = Path(job["run_dir"])
+        audit_path = run_dir / "scientific_audit.json"
+        scientific_audit = json.loads(audit_path.read_text(encoding="utf-8")) if audit_path.is_file() else {}
         upload_summary = self._upload_selected(remote_job_id, run_dir, results["data"].get("artifacts", {}))
         self._complete(
             remote_job_id,
@@ -542,6 +544,7 @@ class DistributedWorker:
                 "qc": sanitize_for_remote(qc["data"], [dataset["root"], str(self.work_root)]),
                 "artifact_counts": results["data"].get("artifacts", {}).get("counts", {}),
                 "uploads": upload_summary,
+                "scientific_audit": scientific_audit,
             },
             None,
         )
@@ -865,6 +868,7 @@ class DistributedWorker:
                 "sample_version": task["sample_version"],
                 "included_subject_ids": task["included_subject_ids"],
                 "model_count": result["manifest"]["model_count"],
+                "scientific_audit": result["manifest"]["scientific_audit"],
                 "uploads": uploaded,
             },
             None,
@@ -949,6 +953,7 @@ class DistributedWorker:
         for name in (
             "artifacts.json",
             "qc_metrics.json",
+            "scientific_audit.json",
             "project.request.yaml",
             "matlab_stdout.log",
             "matlab_stderr.log",

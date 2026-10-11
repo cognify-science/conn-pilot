@@ -26,6 +26,11 @@ retained, marked stale, and cannot be scientifically accepted for the new sample
 A second-level recalculation creates a new sample version and model version while
 reusing compatible first-level outputs.
 
+Saved model files must also pass the [executed-model audit](scientific-audit.md).
+An existing file or unchanged participant count alone cannot establish a current
+model; absent audit evidence produces `unverified_model`. Available quantitative
+QC and visual investigator review are separate requirements.
+
 ## 4. Hypothesis evidence
 
 `get_experiment_quality_report` first asks whether technical completeness, QC, and

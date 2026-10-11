@@ -227,7 +227,8 @@ class OperationTests(unittest.TestCase):
         self.assertEqual(results["data"]["artifacts"]["counts"]["qc_images"], 1)
         self.assertTrue(qc["data"]["technical_completeness"]["passed"])
         self.assertEqual(qc["data"]["subjects"][0]["subject_id"], "sub-001")
-        self.assertEqual(qc["data"]["subjects"][0]["metrics"]["outlier_count"], 4)
+        self.assertIsNone(qc["data"]["subjects"][0]["metrics"]["outlier_count"])
+        self.assertFalse(qc["data"]["subjects"][0]["metrics"]["metric_availability"]["outlier_count"])
         self.assertEqual(qc["data"]["art_thresholds"]["motion_mm"], 0.5)
         self.assertTrue(qc["data"]["scientific_qc"]["review_required"])
 

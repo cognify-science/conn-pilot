@@ -17,6 +17,8 @@ from .errors import ExecutionError
 from .io import sha256_file, write_json, write_yaml
 from .project import execution_identifier
 from .results import collect_artifacts
+from .scientific_audit import audit_run
+from .qc_evidence import refresh_art_evidence
 from .pipeline_graph import build_node_execution_plan
 from .preflight import build_execution_preflight
 from .staging import stage_project_inputs
@@ -205,9 +207,12 @@ def execute_queued_project(
         verification = verify_outputs(execution_project, run_dir)
         if not verification["valid"]:
             raise ExecutionError("Expected CONN outputs are missing: " + ", ".join(verification["missing"]))
+        refresh_art_evidence(execution_project, run_dir)
+        audit = audit_run(execution_project, run_dir)
         artifacts = collect_artifacts(execution_project, run_dir)
         manifest = build_manifest(execution_project, request_snapshot, snapshot, batch_path, environment, verification, staged_inputs)
         manifest["artifacts"] = artifacts["counts"]
+        manifest["scientific_audit"] = audit["model_integrity"]
         write_json(run_dir / "manifest.json", manifest)
         store.update(job_id, "succeeded", return_code=return_code)
     except Exception as error:

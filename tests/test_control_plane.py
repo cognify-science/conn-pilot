@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from test_scientific_audit import valid_audit, valid_qc
+
 import yaml
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -219,7 +221,7 @@ class FakeStore:
         self, job_id: str, owner_subject: str, parent_result_version: str,
         sample_version: str, included_subject_ids: list[str], review_snapshot: dict[str, Any]
     ) -> dict[str, Any]:
-        revision = "frozen-design-aliases-v1"
+        revision = "frozen-design-audit-v2"
         existing = next((item for item in self.second_level_runs
                          if item["job_id"] == job_id
                          and item["sample_version"] == sample_version
@@ -409,6 +411,40 @@ def remote_spec() -> dict[str, Any]:
 
 
 class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
+    def test_review_blocks_legacy_models_missing_participants_and_duplicate_qc(self) -> None:
+        store = FakeStore(); service = ControlPlaneService(store, ROOT / "catalog")
+        spec = remote_spec(); spec["design"]["groups"]["sample"] = ["sub-001", "sub-002"]
+        project = store.create_project("owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", spec)
+        job = store.create_job(project)
+        job.update(state="succeeded", result_version="sha256:result", result_summary={
+            "scientific_audit": valid_audit(["sub-001", "sub-002"]),
+            "qc": {"technical_completeness": {"passed": True}, "subjects": [
+                {"subject_id": sid, "metrics": valid_qc()} for sid in ["sub-001", "sub-002"]]}})
+        store.artifacts.append({"job_id": job["id"], "kind": "second_level_maps"})
+        for sid in ["sub-001", "sub-002"]:
+            store.record_subject_qc_decision(job["id"], "owner", job["result_version"], sid, "accept", None)
+        self.assertTrue(service._review_state("owner", job)["scientific_acceptance"]["eligible"])
+        baseline = copy.deepcopy(job["result_summary"])
+        job["result_summary"].pop("scientific_audit")
+        state = service._review_state("owner", job)
+        self.assertTrue(state["technical_completeness"]["passed"])
+        self.assertEqual(state["second_level"]["status"], "unverified_model")
+        job["result_summary"] = copy.deepcopy(baseline)
+        job["result_summary"]["qc"]["subjects"].pop()
+        state = service._review_state("owner", job)
+        self.assertEqual(state["sample"]["included_subject_ids"], ["sub-001", "sub-002"])
+        self.assertEqual(state["subject_quality"]["missing_qc_subject_ids"], ["sub-002"])
+        self.assertFalse(state["scientific_acceptance"]["eligible"])
+        job["result_summary"] = copy.deepcopy(baseline)
+        job["result_summary"]["qc"]["subjects"].append(copy.deepcopy(baseline["qc"]["subjects"][0]))
+        state = service._review_state("owner", job)
+        self.assertEqual(state["subject_quality"]["duplicate_qc_subject_ids"], ["sub-001"])
+        self.assertFalse(state["scientific_acceptance"]["eligible"])
+        job["result_summary"] = baseline
+        store.second_level_runs.append({"job_id": job["id"], "parent_result_version": job["result_version"],
+            "sample_version": valid_audit(["sub-001", "sub-002"])["sample_version"], "state": "succeeded", "result_summary": {}})
+        self.assertEqual(service._review_state("owner", job)["second_level"]["status"], "unverified_model")
+
     async def test_auth0_jwt_is_verified_and_provisions_researcher(self) -> None:
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         public_key = private_key.public_key()
@@ -814,7 +850,7 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
             ["sub-001", "sub-002"], {},
         )
         self.assertNotEqual(created["id"], "legacy-run")
-        self.assertEqual(created["computation_revision"], "frozen-design-aliases-v1")
+        self.assertEqual(created["computation_revision"], "frozen-design-audit-v2")
 
         repeated = store.create_second_level_run(
             "job-1", "owner", "sha256:result-one", "sha256:sample-one",
@@ -826,8 +862,10 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
     def test_subject_qc_decisions_are_versioned_and_keep_review_layers_separate(self) -> None:
         store = FakeStore()
         service = ControlPlaneService(store, ROOT / "catalog")
+        spec = remote_spec()
+        spec["design"]["groups"]["sample"] = ["sub-001", "sub-002"]
         project = store.create_project(
-            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", spec
         )
         job = store.create_job(project)
         job.update(
@@ -842,13 +880,13 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
                             "subject_id": "sub-001",
                             "qc_images": 1,
                             "preprocessing_qc": 3,
-                            "metrics": {"outlier_count": 2, "outlier_percent": 1.25},
+                            "metrics": valid_qc(outliers=2),
                         },
                         {
                             "subject_id": "sub-002",
                             "qc_images": 1,
                             "preprocessing_qc": 3,
-                            "metrics": {"outlier_count": 8, "outlier_percent": 5.0},
+                            "metrics": valid_qc(outliers=8),
                         },
                     ],
                 }
@@ -883,6 +921,7 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
 
+        job["result_summary"]["scientific_audit"] = valid_audit(["sub-001", "sub-002"])
         evidence = service.get_subject_qc_evidence("owner", job["id"], "sub-001")
         self.assertEqual(evidence["data"]["subjects"][0]["metrics"]["outlier_count"], 2)
         self.assertEqual(evidence["data"]["subjects"][0]["art_images"][0]["id"], "art-1")

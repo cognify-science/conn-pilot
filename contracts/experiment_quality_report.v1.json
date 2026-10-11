@@ -20,6 +20,8 @@
     "technical_completeness",
     "subject_quality_review",
     "non_empty_effective_sample",
+    "qc_metric_availability",
+    "executed_model_integrity",
     "current_second_level"
   ],
   "required_hypothesis_definition": [
@@ -46,5 +48,7 @@
     "get_experiment_quality_report",
     "review portal",
     "reproducibility package: experiment-quality.json, report.json, HTML and PDF"
-  ]
+  ],
+  "automatic_audit_contract": "scientific_audit.v1.json",
+  "recalculated_inference_binding": "Evidence must match second_level_output_version in addition to parent result_version and sample_version."
 }

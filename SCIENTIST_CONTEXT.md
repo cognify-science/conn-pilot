@@ -65,6 +65,7 @@ effect.
 | Which datasets are registered? | [`docs/science/preloaded-datasets.md`](docs/science/preloaded-datasets.md) and runtime `list_datasets` |
 | How did the benchmarks perform? | [`docs/science/benchmark-validation-2026-10.md`](docs/science/benchmark-validation-2026-10.md) |
 | How should QC be performed? | [`docs/science/qc-manual.md`](docs/science/qc-manual.md) |
+| How are saved models, QC availability and statistics audited? | [Automatic scientific audit](docs/science/scientific-audit.md) and `contracts/scientific_audit.v1.json` |
 | What statistical claims are permitted? | [`docs/science/qc-and-inference.md`](docs/science/qc-and-inference.md) |
 | Can I inspect a complete study lifecycle? | [`docs/science/worked-example.md`](docs/science/worked-example.md) |
 | What does each MCP tool do? | [`docs/reference/mcp-tools.md`](docs/reference/mcp-tools.md) |

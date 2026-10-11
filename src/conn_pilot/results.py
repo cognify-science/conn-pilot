@@ -32,6 +32,7 @@ def collect_artifacts(project: dict[str, Any], run_dir: Path) -> dict[str, Any]:
             "inputs/**/rp_*.txt",
         ),
         "qc_metrics": ("qc_metrics.json",),
+        "scientific_audit": ("scientific_audit.json",),
     }
     groups: dict[str, list[dict[str, Any]]] = {}
     for name, globs in patterns.items():

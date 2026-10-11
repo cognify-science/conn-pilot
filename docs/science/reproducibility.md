@@ -24,6 +24,12 @@ the generated execution plan, the local attempt, and the reviewed result.
 HTML, and PDF reports; methods; parameter provenance; literature identifiers;
 QC evidence; current statistical artifacts; and a file manifest with hashes.
 
+New packages also include `scientific-audit.json` and `statistical-results.json`,
+with verified model evidence, explicit testing families and correction scope,
+availability-aware QC, pending items, and current output-version binding.
+See [automatic scientific audit](scientific-audit.md) for extraction limits and
+read-only auditing of historical results.
+
 The package captures what CONN Pilot did and what the researcher decided. It does
 not bundle raw neuroimages, replace the original BIDS dataset, or guarantee that
 licensed external software and atlas resources may be redistributed.

@@ -10,6 +10,19 @@
   decisions, sample versions, and scientific decisions.
 - Public WU120, fibromyalgia, and UCLA CNP benchmark registrations.
 
+### Saved-result scientific audit
+
+- Audit actual model subjects, frozen matrix values, rank, residual degrees of
+  freedom, condition and contrast; absent evidence blocks scientific currency.
+- Export availability-aware QC, recover ART evidence with file hashes, and
+  compute contiguous outliers on acquired-volume rows; retain human decisions.
+- Extract exploratory univariate T evidence with explicit two-sided p-values,
+  within-model BH families and pointwise ROI intervals checked against saved OLS.
+- Add audit/statistics records to reproducibility reports with sample/output
+  binding, pending items and a retrospective command that preserves originals.
+- Synthetic integration and numerical tests cover these additions; fresh CONN
+  validation and unsupported inference remain documented limits.
+
 ### Validation additions — October 2026
 
 - Added an official CONN source guide, machine-readable consultation index,

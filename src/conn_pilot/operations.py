@@ -18,6 +18,7 @@ from .project import ValidationResult, validate_project as validate_project_defi
 from .pipeline_graph import build_node_execution_plan
 from .preflight import build_execution_preflight
 from .progress import build_job_progress
+from .qc_evidence import normalize_qc
 
 
 REQUEST_SCHEMA = "conn_pilot_operation_request_v1"
@@ -443,7 +444,7 @@ class OperationService:
                 "reason": "This version indexes QC evidence but does not approve or exclude subjects automatically.",
             },
         }
-        return _response("get_qc_summary", data, warnings=warnings)
+        return _response("get_qc_summary", normalize_qc(data), warnings=warnings)
 
     def _load_project(self, project_path: str) -> tuple[Path, dict[str, Any], ResolvedPipeline]:
         path = Path(project_path).resolve()

@@ -14,6 +14,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from .qc_evidence import normalize_metrics
+
 
 def build_reproducibility_package(
     *,
@@ -36,6 +38,9 @@ def build_reproducibility_package(
             "result_version": job.get("result_version"),
             "state": job.get("state"),
             "summary": job.get("result_summary"),
+            "started_at": job.get("started_at"),
+            "finished_at": job.get("finished_at"),
+            "elapsed_seconds": _elapsed_seconds(job),
         },
         "project": {
             "id": project["id"],
@@ -45,6 +50,7 @@ def build_reproducibility_package(
         },
         "review": review,
         "experiment_quality": quality_report,
+        "scientific_audit": (quality_report or {}).get("automatic_audit", {}),
         "method_decisions": method_decisions,
         "artifacts": [
             {key: value for key, value in artifact.items() if key != "object_key"}
@@ -74,6 +80,12 @@ def build_reproducibility_package(
         package.writestr("report.pdf", report_pdf)
         package.writestr("report.json", _json(report))
         package.writestr("experiment-quality.json", _json(quality_report or {}))
+        package.writestr("scientific-audit.json", _json(report["scientific_audit"]))
+        package.writestr("statistical-results.json", _json({
+            "result_version": job.get("result_version"), "sample_version": review["sample"]["version"],
+            "second_level_output_version": report["scientific_audit"].get("second_level_output_version"),
+            "models": report["scientific_audit"].get("models", []),
+        }))
         package.writestr("methods.md", methods)
         package.writestr("parameters.json", _json(project["spec"].get("parameters", {})))
         package.writestr("literature.json", _json(method_decisions))
@@ -98,6 +110,7 @@ def build_reproducibility_package(
         "excluded_subject_ids": review["sample"]["excluded_subject_ids"],
         "files": [
             "report.html", "report.pdf", "report.json", "experiment-quality.json",
+            "scientific-audit.json", "statistical-results.json",
             "methods.md", "parameters.json",
             "literature.json", "subject-decisions.csv", "dataset_description.json",
             "artifact-manifest.json",
@@ -156,10 +169,25 @@ def _report_html(report: dict[str, Any]) -> str:
     quality = report.get("experiment_quality") or {}
     quality_state = quality.get("quality_assessment") or {}
     hypothesis = quality.get("hypothesis_assessment") or {}
+    audit = quality.get("automatic_audit") or {}
+    audit_html = html.escape(json.dumps({
+        "model_integrity": audit.get("model_integrity", {"status": "unavailable"}),
+        "pending_items": audit.get("pending_items", []),
+        "qc_evidence": audit.get("qc_evidence", []),
+        "limitations": audit.get("limitations", []),
+    }, ensure_ascii=False, indent=2))
+    model_rows = []
+    for model in audit.get("models", []):
+        design, stats = model.get("design") or {}, model.get("statistics") or {}
+        cells = [model.get("contrast_name"), model.get("source_identity") or design.get("input_source_indices"),
+                 design.get("row_count"), design.get("rank"), design.get("residual_degrees_of_freedom"),
+                 design.get("status"), stats.get("status"), (stats.get("multiplicity") or {}).get("family_size"),
+                 stats.get("minimum_adjusted_p_value")]
+        model_rows.append("<tr>"+"".join("<td>"+html.escape(str(value if value is not None else "n/a"))+"</td>" for value in cells)+"</tr>")
     rows = []
     for item in review["subject_quality"]["subjects"]:
         decision = item.get("decision") or {}
-        metrics = html.escape(json.dumps(item.get("metrics", {}), ensure_ascii=False))
+        metrics = html.escape(json.dumps(normalize_metrics(item.get("metrics", {})), ensure_ascii=False))
         rows.append(
             "<tr><td>{}</td><td>{}</td><td><code>{}</code></td></tr>".format(
                 html.escape(str(item.get("subject_id", ""))),
@@ -169,7 +197,7 @@ def _report_html(report: dict[str, Any]) -> str:
     return f"""<!doctype html><html><head><meta charset=\"utf-8\"><title>CONN Pilot report</title>
 <style>body{{font:16px system-ui;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#17202a}}
 table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #ccd1d1;padding:.6rem;text-align:left}}
-code{{white-space:pre-wrap}}.badge{{display:inline-block;padding:.25rem .5rem;background:#eef2ff;border-radius:.4rem}}</style></head>
+code,pre{{white-space:pre-wrap;overflow-wrap:anywhere}}.badge{{display:inline-block;padding:.25rem .5rem;background:#eef2ff;border-radius:.4rem}}</style></head>
 <body><h1>{html.escape(str(project.get('name','CONN Pilot report')))}</h1>
 <p>{html.escape(str(project.get('research_question','')))}</p>
 <p>Result version: <code>{html.escape(str(report['job'].get('result_version')))}</code></p>
@@ -180,6 +208,11 @@ code{{white-space:pre-wrap}}.badge{{display:inline-block;padding:.25rem .5rem;ba
 <p>Afirmación confirmatoria permitida: <strong>{'sí' if quality_state.get('permits_confirmatory_claim') else 'no'}</strong></p>
 <p>Hipótesis: <span class=\"badge\">{html.escape(str(hypothesis.get('status', 'not_assessed')))}</span></p>
 <p>{html.escape(str(hypothesis.get('conclusion', 'No evaluada.')))}</p>
+<h2>Automatic scientific audit</h2><pre>{audit_html}</pre>
+<table><thead><tr><th>Contrast</th><th>Source</th><th>N</th><th>Rank</th><th>Residual df</th><th>Model</th><th>Statistics</th><th>Tests</th><th>Minimum q</th></tr></thead>
+<tbody>{''.join(model_rows)}</tbody></table>
+<p>Statistical estimates, testing families, corrections and artifact hashes are in statistical-results.json.
+An unavailable metric is not zero. Exploratory summaries do not establish hypothesis support.</p>
 <h2>Subject quality review</h2><table><thead><tr><th>Subject</th><th>Decision</th><th>Metrics</th></tr></thead>
 <tbody>{''.join(rows)}</tbody></table><h2>Audit record</h2>
 <p>This report binds technical completeness, subject decisions, the effective sample and the active second-level version.</p>
@@ -205,6 +238,7 @@ def _report_pdf(report: dict[str, Any]) -> bytes:
     quality = report.get("experiment_quality") or {}
     quality_state = quality.get("quality_assessment") or {}
     hypothesis = quality.get("hypothesis_assessment") or {}
+    audit = quality.get("automatic_audit") or {}
     story = [
         Paragraph(html.escape(str(project.get("name", "CONN Pilot report"))), styles["Title"]),
         Paragraph(html.escape(str(project.get("research_question", ""))), styles["BodyText"]),
@@ -226,12 +260,21 @@ def _report_pdf(report: dict[str, Any]) -> bytes:
             styles["BodyText"],
         ),
         Spacer(1, 5 * mm),
+        Paragraph("Automatic scientific audit", styles["Heading2"]),
+        Paragraph(
+            f"Executed model: {html.escape(str((audit.get('model_integrity') or {}).get('status', 'unavailable')))}<br/>"
+            f"Pending: {html.escape(', '.join(audit.get('pending_items', [])) or 'See detailed audit')}<br/>"
+            "Missing measurements are unavailable, not zero. Estimates, testing families, "
+            "correction scope and artifact hashes are recorded in statistical-results.json. "
+            "Exploratory summaries do not establish hypothesis support.", styles["BodyText"],
+        ),
+        Spacer(1, 5 * mm),
         Paragraph("Subject quality review", styles["Heading2"]),
     ]
     rows = [["Subject", "Decision", "Outliers", "tSNR", "DVARS mean"]]
     for item in review["subject_quality"]["subjects"]:
         decision = item.get("decision") or {}
-        metrics = item.get("metrics") or {}
+        metrics = normalize_metrics(item.get("metrics") or {})
         rows.append([
             str(item.get("subject_id", "")),
             str(decision.get("decision") or "needs_review"),
@@ -249,6 +292,27 @@ def _report_pdf(report: dict[str, Any]) -> bytes:
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F9FC")]),
     ]))
     story.extend([table, Spacer(1, 5 * mm)])
+    model_rows = [["Contrast / source", "N / rank", "df", "Model / stats", "Tests", "Min q"]]
+    for model in audit.get("models", []):
+        design, stats = model.get("design") or {}, model.get("statistics") or {}
+        source = model.get("source_identity") or design.get("input_source_indices", [])
+        model_rows.append([
+            Paragraph(html.escape(str(model.get("contrast_name", "n/a")))+"<br/>"+html.escape(str(source)), styles["BodyText"]),
+            f"{design.get('row_count', 'n/a')} / {design.get('rank', 'n/a')}",
+            str(design.get("residual_degrees_of_freedom", "n/a")),
+            Paragraph(html.escape(str(design.get("status", "unverified")))+"<br/>"+html.escape(str(stats.get("status", "unavailable"))), styles["BodyText"]),
+            str((stats.get("multiplicity") or {}).get("family_size", "n/a")),
+            _metric(stats, "minimum_adjusted_p_value"),
+        ])
+    if len(model_rows) > 1:
+        model_table = Table(model_rows, repeatRows=1, colWidths=[60*mm, 20*mm, 12*mm, 40*mm, 15*mm, 14*mm])
+        model_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8EEF8")),
+            ("GRID", (0, 0), (-1, -1), .5, colors.HexColor("#AAB4C3")),
+            ("FONTSIZE", (0, 0), (-1, -1), 8), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.extend([Paragraph("Executed models and exploratory statistics", styles["Heading2"]), model_table,
+                      Paragraph("Min q is within-model BH only; ROI intervals and individual effects are in statistical-results.json.", styles["BodyText"]), Spacer(1, 5*mm)])
     included = ", ".join(review["sample"]["included_subject_ids"]) or "none"
     excluded = ", ".join(review["sample"]["excluded_subject_ids"]) or "none"
     story.extend([
@@ -283,8 +347,20 @@ def _metric(metrics: dict[str, Any], name: str, *, suffix: str = "") -> str:
     if value is None:
         return "n/a"
     if isinstance(value, float):
+        if name == "minimum_adjusted_p_value":
+            return f"{value:.3g}"
         return f"{value:.3f}{suffix}"
     return f"{value}{suffix}"
+
+
+def _elapsed_seconds(job: dict[str, Any]) -> float | None:
+    try:
+        start = datetime.fromisoformat(str(job["started_at"]).replace("Z", "+00:00"))
+        end = datetime.fromisoformat(str(job["finished_at"]).replace("Z", "+00:00"))
+        seconds = (end-start).total_seconds()
+        return seconds if seconds >= 0 else None
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 def _json(value: Any) -> str:

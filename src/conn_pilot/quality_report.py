@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from typing import Any
+import math
+
+from .qc_evidence import assess_subject_metrics
+from .scientific_audit import model_integrity_gate
 
 
 HYPOTHESIS_STATUSES = {
@@ -22,6 +26,14 @@ def build_experiment_quality_report(
     result_version = job.get("result_version")
     sample = review.get("sample") or {}
     sample_version = sample.get("version")
+    active_run = (review.get("second_level") or {}).get("active_recalculation")
+    if active_run:
+        # A later output must never inherit inference from the original model,
+        # even when the accepted sample happens to be unchanged.
+        result_summary = dict(active_run.get("result_summary") or {})
+        inference = result_summary.get("hypothesis_assessment") or {}
+        if not active_run.get("output_version") or inference.get("second_level_output_version") != active_run.get("output_version"):
+            result_summary.pop("hypothesis_assessment", None)
     subjects = (review.get("subject_quality") or {}).get("subjects") or []
     included = sample.get("included_subject_ids") or []
     excluded = sample.get("excluded_subject_ids") or []
@@ -42,6 +54,12 @@ def build_experiment_quality_report(
         cautions=cautions,
     )
     scientific = review.get("scientific_acceptance") or {}
+    audit = (review.get("second_level") or {}).get("scientific_audit") or {}
+    pending = [gate["id"] for gate in gates if not gate["passed"]]
+    if (audit.get("structured_inference") or {}).get("status") != "available":
+        pending.append("structured_inference_incomplete")
+    if not assessment["conclusion_permitted"]:
+        pending.append("hypothesis_endpoint_or_evidence_requires_review")
 
     return {
         "schema_version": "conn_pilot_experiment_quality_report_v1",
@@ -61,6 +79,7 @@ def build_experiment_quality_report(
             "sample_adequacy_established": sample_adequacy_established,
             "permits_confirmatory_claim": (
                 quality_permits_interpretation and sample_adequacy_established
+                and assessment["conclusion_permitted"]
             ),
             "gates": gates,
             "blocking_reasons": quality_blockers,
@@ -70,6 +89,25 @@ def build_experiment_quality_report(
             "excluded_subject_count": len(excluded),
         },
         "hypothesis_assessment": assessment,
+        "automatic_audit": {
+            "schema_version": audit.get("schema_version"),
+            "created_at": audit.get("created_at"),
+            "auditor_sha256": audit.get("auditor_sha256"),
+            "numerical_runtime": audit.get("numerical_runtime", {}),
+            "project_spec_sha256": audit.get("project_spec_sha256"),
+            "included_subject_ids": audit.get("included_subject_ids", []),
+            "structured_inference": audit.get("structured_inference", {"status": "incomplete"}),
+            "result_version": result_version,
+            "sample_version": sample_version,
+            "second_level_output_version": ((review.get("second_level") or {}).get("active_recalculation") or {}).get("output_version"),
+            "model_integrity": audit.get("model_integrity", {"status": "unavailable"}),
+            "models": audit.get("models", []),
+            "limitations": audit.get("limitations", []),
+            "qc_evidence": [{"subject_id": item.get("subject_id"),
+                             **assess_subject_metrics(item.get("metrics") or {})} for item in subjects],
+            "pending_items": pending,
+            "automatic_scientific_acceptance": None,
+        },
         "investigator_scientific_decision": {
             "status": scientific.get("status", "needs_review"),
             "decision": scientific.get("current_decision"),
@@ -93,6 +131,11 @@ def _quality_gates(review: dict[str, Any]) -> list[dict[str, Any]]:
     sample = review.get("sample") or {}
     second_level = review.get("second_level") or {}
     included = sample.get("included_subject_ids") or []
+    audit = second_level.get("scientific_audit") or {}
+    subjects = subject_quality.get("subjects") or []
+    unavailable_qc = sorted(set(included) - {item.get("subject_id") for item in subjects}) + [item.get("subject_id") for item in subjects
+                      if item.get("subject_id") in included
+                      and assess_subject_metrics(item.get("metrics") or {})["status"] != "available"]
     return [
         {
             "id": "technical_completeness",
@@ -113,6 +156,21 @@ def _quality_gates(review: dict[str, Any]) -> list[dict[str, Any]]:
             "passed": bool(included),
             "reason": "La muestra efectiva no contiene sujetos aceptados.",
             "evidence": {"included_subject_count": len(included)},
+        },
+        {
+            "id": "qc_metric_availability",
+            "passed": bool(subjects) and not unavailable_qc and subject_quality.get("qc_identity_valid", True),
+            "reason": "Faltan métricas ART verificables o sus recuentos son inconsistentes.",
+            "evidence": {"subject_ids": unavailable_qc,
+                         "missing_qc_subject_ids": subject_quality.get("missing_qc_subject_ids", []),
+                         "unexpected_qc_subject_ids": subject_quality.get("unexpected_qc_subject_ids", []),
+                         "duplicate_qc_subject_ids": subject_quality.get("duplicate_qc_subject_ids", [])},
+        },
+        {
+            "id": "executed_model_integrity",
+            "passed": model_integrity_gate(audit, sample.get("version"), included),
+            "reason": "El modelo ejecutado no tiene una auditoría vigente de muestra, diseño, rango, grados de libertad y contraste.",
+            "evidence": audit.get("model_integrity", {"status": "unavailable"}),
         },
         {
             "id": "current_second_level",
@@ -295,15 +353,17 @@ def _assessment(
 
 
 def _complete_inferential_evidence(evidence: dict[str, Any]) -> bool:
-    has_effect = isinstance(evidence.get("effect_estimate"), (int, float))
+    def finite(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    has_effect = finite(evidence.get("effect_estimate"))
     interval = evidence.get("confidence_interval")
     has_interval = (
         isinstance(interval, dict)
-        and isinstance(interval.get("low"), (int, float))
-        and isinstance(interval.get("high"), (int, float))
-        and isinstance(interval.get("level"), (int, float))
+        and finite(interval.get("low")) and finite(interval.get("high"))
+        and interval["low"] <= interval["high"]
+        and finite(interval.get("level")) and 0 < interval["level"] < 1
     )
-    has_test = isinstance(evidence.get("p_value"), (int, float))
+    has_test = finite(evidence.get("p_value")) and 0 <= evidence["p_value"] <= 1
     multiplicity = evidence.get("multiplicity")
     has_multiplicity = isinstance(multiplicity, dict) and bool(multiplicity.get("method"))
     return bool(

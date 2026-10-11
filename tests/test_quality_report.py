@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from conn_pilot.quality_report import build_experiment_quality_report  # noqa: E402
+from test_scientific_audit import valid_audit, valid_qc
 
 
 def review(*, technical: bool = True, complete: bool = True, current: bool = True) -> dict:
@@ -17,14 +18,15 @@ def review(*, technical: bool = True, complete: bool = True, current: bool = Tru
         "subject_quality": {
             "complete": complete,
             "unresolved_subject_ids": [] if complete else ["sub-002"],
-            "subjects": [{"subject_id": "sub-001"}, {"subject_id": "sub-002"}],
+            "subjects": [{"subject_id": sid, "metrics": valid_qc()} for sid in ["sub-001", "sub-002"]],
         },
         "sample": {
             "version": "sha256:sample",
             "included_subject_ids": ["sub-001", "sub-002"],
             "excluded_subject_ids": [],
         },
-        "second_level": {"status": "current" if current else "stale", "blocked": not current},
+        "second_level": {"status": "current" if current else "stale", "blocked": not current,
+                         "scientific_audit": valid_audit(["sub-001", "sub-002"], "sha256:sample")},
         "scientific_acceptance": {"status": "needs_review", "current_decision": None},
     }
 
@@ -55,6 +57,43 @@ def project(*, operationalized: bool = False) -> dict:
 
 
 class ExperimentQualityReportTests(unittest.TestCase):
+    def test_old_models_missing_qc_and_missing_subject_cannot_pass_quality(self) -> None:
+        for mutation in ("audit", "qc", "subject"):
+            state = review()
+            if mutation == "audit":
+                state["second_level"].pop("scientific_audit")
+            elif mutation == "qc":
+                state["subject_quality"]["subjects"][0]["metrics"] = {"outlier_count": 0}
+            else:
+                state["subject_quality"]["subjects"].pop()
+            report = build_experiment_quality_report(
+                job={"id": "job-1", "result_version": "sha256:result", "result_summary": {}},
+                project=project(), review=state)
+            self.assertFalse(report["quality_assessment"]["permits_hypothesis_assessment"])
+            self.assertTrue(report["automatic_audit"]["pending_items"])
+
+    def test_new_output_never_inherits_hypothesis_evidence_from_prior_model(self) -> None:
+        state = review()
+        state["second_level"]["active_recalculation"] = {"output_version": "sha256:new", "result_summary": {}}
+        job = {"id": "job-1", "result_version": "sha256:result", "result_summary": {
+            "hypothesis_assessment": {"result_version": "sha256:result", "sample_version": "sha256:sample",
+                "evidence": {"contrast_name": "sample_mean", "effect_estimate": .2, "p_value": .01,
+                    "multiplicity": {"method": "FDR", "adjusted_p_value": .02}}}}}
+        report = build_experiment_quality_report(job=job, project=project(operationalized=True), review=state)
+        self.assertEqual(report["hypothesis_assessment"]["status"], "not_evaluable_inference")
+        self.assertEqual(report["automatic_audit"]["second_level_output_version"], "sha256:new")
+        self.assertFalse(report["quality_assessment"]["permits_confirmatory_claim"])
+
+    def test_nonfinite_effect_cannot_support_a_hypothesis(self) -> None:
+        for effect in [float("nan"), float("inf"), True]:
+            report = build_experiment_quality_report(
+                job={"id": "job-1", "result_version": "sha256:result", "result_summary": {
+                    "hypothesis_assessment": {"result_version": "sha256:result", "sample_version": "sha256:sample",
+                        "evidence": {"contrast_name": "sample_mean", "effect_estimate": effect, "p_value": .01,
+                            "multiplicity": {"method": "FDR", "adjusted_p_value": .02}}}}},
+                project=project(operationalized=True), review=review())
+            self.assertEqual(report["hypothesis_assessment"]["status"], "not_evaluable_inference")
+
     def test_quality_failure_blocks_hypothesis_assessment(self) -> None:
         report = build_experiment_quality_report(
             job={"id": "job-1", "result_version": "sha256:result", "result_summary": {}},

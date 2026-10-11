@@ -11,6 +11,7 @@ from .analysis_contract import analysis_contract
 from .environment import _matlab_environment, matlab_batch_command
 from .io import write_json
 from .project import execution_identifier
+from .scientific_audit import audit_run
 
 
 def run_second_level_recalculation(
@@ -145,6 +146,12 @@ def run_second_level_recalculation(
     models = sorted(output_dir.glob(model_pattern)) if output_dir.is_dir() else []
     if not models:
         raise RuntimeError("CONN did not create the expected versioned second-level model")
+    audit_path = task_dir / "scientific_audit.json"
+    audit = audit_run(
+        project, run_dir, output_dir=output_dir,
+        included_subject_ids=included_subject_ids, aliases=effect_aliases,
+        destination=audit_path,
+    )
     result_files = sorted(
         path for path in output_dir.glob("**/*")
         if path.is_file() and path.suffix.lower() in {".mat", ".nii", ".json"}
@@ -172,6 +179,7 @@ def run_second_level_recalculation(
         "effect_aliases": effect_aliases,
         "source_names": sources,
         "model_count": len(models),
+        "scientific_audit": audit,
         "files": [
             {
                 "relative_path": path.relative_to(output_dir).as_posix(),
@@ -190,7 +198,7 @@ def run_second_level_recalculation(
         "stdout_path": stdout_path,
         "stderr_path": stderr_path,
         "output_dir": output_dir,
-        "artifact_paths": [manifest_path, script_path, stdout_path, stderr_path, *result_files],
+        "artifact_paths": [manifest_path, audit_path, script_path, stdout_path, stderr_path, *result_files],
     }
 
 def _matlab(value: Any) -> str:

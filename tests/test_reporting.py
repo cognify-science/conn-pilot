@@ -29,7 +29,8 @@ class ReportingTests(unittest.TestCase):
         }
         content, manifest = build_reproducibility_package(
             job={"id": "job-1", "result_version": "sha256:result", "state": "succeeded",
-                 "result_summary": {"qc": {}}},
+                 "result_summary": {"qc": {}}, "started_at": "2026-09-26T12:00:00Z",
+                 "finished_at": "2026-09-26T12:02:00Z"},
             project={"id": "project-1", "dataset_id": "sandbox", "pipeline_id": "pipe",
                      "pipeline_version": "1.0", "spec": {"project": {"name": "Pilot"},
                      "parameters": {"denoising": {}}}},
@@ -38,6 +39,8 @@ class ReportingTests(unittest.TestCase):
             method_decisions=[{"parameter_path": "denoising.bandpass", "selected_value": [0.01, 0.1],
                                "rationale": "Reviewed", "evidence_ids": ["pmid:1"]}],
             quality_report={
+                "automatic_audit": {"second_level_output_version": "sha256:output", "models": [],
+                    "model_integrity": {"status": "unavailable"}, "pending_items": ["executed_model_integrity"]},
                 "quality_assessment": {"status": "sufficient_for_interpretation"},
                 "hypothesis_assessment": {
                     "status": "not_evaluable_inference",
@@ -56,6 +59,13 @@ class ReportingTests(unittest.TestCase):
                 "not_evaluable_inference",
             )
             self.assertIn("experiment-quality.json", package.namelist())
+            self.assertEqual(report["job"]["elapsed_seconds"], 120)
+            stats = json.loads(package.read("statistical-results.json"))
+            self.assertEqual(stats["result_version"], "sha256:result")
+            self.assertEqual(stats["sample_version"], "sha256:sample")
+            self.assertEqual(stats["second_level_output_version"], "sha256:output")
+            self.assertIn("executed_model_integrity", package.read("report.html").decode())
+            self.assertEqual(json.loads(package.read("scientific-audit.json"))["model_integrity"]["status"], "unavailable")
             self.assertNotIn("object_key", report["artifacts"][0])
             self.assertIn("pmid:1", package.read("methods.md").decode())
             self.assertTrue(package.read("report.pdf").startswith(b"%PDF"))

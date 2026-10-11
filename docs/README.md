@@ -66,3 +66,6 @@ The scientific statements in these pages can be checked against:
 
 Where prose and a versioned contract disagree, the contract defines what that
 software version can execute. Neither source supersedes scientific judgment.
+
+Saved-model, QC availability and structured inference checks are described in the
+[automatic scientific audit guide](science/scientific-audit.md).

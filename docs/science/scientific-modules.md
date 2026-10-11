@@ -433,6 +433,8 @@ subject exclusion, or complete parameter-level risk-of-bias appraisal.
 | acquisition decisions | `src/conn_pilot/preflight.py` |
 | CONN batch construction | `src/conn_pilot/adapter.py` |
 | artifacts and run manifest | `src/conn_pilot/results.py` and `src/conn_pilot/jobs.py` |
+| executed model and inferential extraction | `src/conn_pilot/scientific_audit.py` and [audit guide](scientific-audit.md) |
+| availability-aware QC | `src/conn_pilot/qc_evidence.py` |
 | quality and hypothesis logic | `src/conn_pilot/quality_report.py` |
 | reproducibility archive | `src/conn_pilot/reporting.py` |
 | stable external behavior | `contracts/` |

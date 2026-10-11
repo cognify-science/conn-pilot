@@ -14,6 +14,8 @@ from .io import load_yaml
 from .jobs import JobStore, execute_queued_project, run_project
 from .operations import OPERATION_NAMES, OperationService
 from .project import validate_project
+from .scientific_audit import audit_run
+from .qc_evidence import refresh_art_evidence
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -67,6 +69,9 @@ def build_parser() -> argparse.ArgumentParser:
     worker.add_argument("job_id")
     worker.add_argument("--environment", required=True)
     worker.add_argument("--jobs-db", required=True)
+    audit = subparsers.add_parser("audit-results", help="Audit saved models without rerunning CONN")
+    audit.add_argument("run_dir")
+    audit.add_argument("--second-level-run", help="Existing recalculation ID within this run")
     return parser
 
 
@@ -85,6 +90,26 @@ def main(argv: list[str] | None = None) -> None:
 
 def dispatch(args: argparse.Namespace) -> dict[str, Any] | list[Any]:
     catalog = Catalog(args.catalog)
+    if args.command == "audit-results":
+        run_dir = Path(args.run_dir).resolve()
+        project = load_yaml(run_dir / "project.execution.yaml")
+        from uuid import uuid4
+        review_dir = run_dir / "audit_reviews" / uuid4().hex
+        refresh_art_evidence(project, run_dir, destination=review_dir / "qc_metrics.json")
+        kwargs: dict[str, Any] = {}
+        if args.second_level_run:
+            if Path(args.second_level_run).name != args.second_level_run or args.second_level_run in {".", ".."}:
+                raise ValueError("Invalid second-level run identifier")
+            task = run_dir / "second_level_runs" / args.second_level_run
+            manifest = json.loads((task / "second_level_manifest.json").read_text(encoding="utf-8"))
+            sample_key = manifest["sample_version"].removeprefix("sha256:")[:16]
+            from .project import execution_identifier
+            kwargs = {"output_dir": run_dir / execution_identifier(project["project"]["name"]) / "results" / "secondlevel" / f"sample_{sample_key}",
+                      "included_subject_ids": manifest["included_subject_ids"],
+                      "aliases": manifest.get("effect_aliases")}
+        result = audit_run(project, run_dir, destination=review_dir / "scientific_audit.json", **kwargs)
+        return {"ok": result["model_integrity"]["status"] == "passed", "audit": result,
+                "review_directory": str(review_dir), "historical_result_modified": False}
     if args.command == "worker":
         environment = load_yaml(args.environment)
         return execute_queued_project(args.job_id, environment, JobStore(args.jobs_db))

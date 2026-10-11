@@ -40,6 +40,8 @@ from .literature import LiteratureEvidenceService
 from .parameter_resolver import ParameterResolver
 from .project import validate_project as validate_project_definition
 from .quality_report import build_experiment_quality_report
+from .qc_evidence import normalize_qc, assess_subject_metrics
+from .scientific_audit import model_integrity_gate
 from .reporting import build_reproducibility_package
 from .seed_catalog import SeedCatalog
 from .pipeline_graph import (
@@ -989,7 +991,7 @@ class ControlPlaneService:
                 "job_id": job_id,
                 "state": job["state"],
                 "result_version": job.get("result_version"),
-                "qc": summary.get("qc", {}),
+                "qc": normalize_qc(summary.get("qc", {})),
                 "review": review,
             },
         )
@@ -1247,7 +1249,7 @@ class ControlPlaneService:
     def _review_state(self, subject: str, job: dict[str, Any]) -> dict[str, Any]:
         result_version = job.get("result_version")
         summary = job.get("result_summary") or {}
-        qc = summary.get("qc", {})
+        qc = normalize_qc(summary.get("qc", {}))
         qc_subjects = qc.get("subjects", [])
         if isinstance(qc_subjects, dict):
             qc_subjects = [qc_subjects]
@@ -1274,6 +1276,7 @@ class ControlPlaneService:
                 {
                     "subject_id": subject_id,
                     "metrics": item.get("metrics", {}),
+                    "metric_evidence": item.get("metric_evidence", {}),
                     "artifact_counts": {
                         "qc_images": item.get("qc_images", 0),
                         "preprocessing_qc": item.get("preprocessing_qc", 0),
@@ -1282,6 +1285,17 @@ class ControlPlaneService:
                     "decision": current.get(subject_id),
                 }
             )
+        original_ids = sorted(item["subject_id"] for item in subjects)
+        project = self._project(job["project_id"], subject)
+        expected_ids = sorted({sid for members in (project.get("spec") or {}).get("design", {}).get("groups", {}).values() for sid in members})
+        unexpected_qc_ids = sorted(set(original_ids) - set(expected_ids)) if expected_ids else []
+        duplicate_qc_ids = sorted({sid for sid in original_ids if original_ids.count(sid) > 1})
+        qc_identity_valid = not unexpected_qc_ids and not duplicate_qc_ids
+        missing_qc_ids = sorted(set(expected_ids) - set(original_ids))
+        for subject_id in missing_qc_ids:
+            subjects.append({"subject_id": subject_id, "metrics": {}, "artifact_counts": {},
+                             "art_images": [], "metric_evidence": assess_subject_metrics({}),
+                             "decision": current.get(subject_id)})
         original_ids = sorted(item["subject_id"] for item in subjects)
         excluded_ids = sorted(
             item["subject_id"]
@@ -1317,7 +1331,14 @@ class ControlPlaneService:
              and item.get("state") in {"queued", "running"}),
             None,
         )
-        second_level_current = bool(active_recalculation) or (second_level_available and not sample_changed)
+        computation_available = bool(active_recalculation) or (second_level_available and not sample_changed)
+        active_summary = (active_recalculation.get("result_summary") or {}) if active_recalculation else summary
+        scientific_audit = active_summary.get("scientific_audit") or {}
+        model_verified = model_integrity_gate(scientific_audit, sample_version, included_ids)
+        second_level_current = computation_available and model_verified and qc_identity_valid
+        incomplete_metric_ids = [item["subject_id"] for item in subjects
+                                 if item["subject_id"] in included_ids
+                                 and item["metric_evidence"].get("status") != "available"]
         technical = qc.get("technical_completeness", {})
         technical_passed = bool(technical.get("passed"))
         eligible = bool(
@@ -1326,6 +1347,7 @@ class ControlPlaneService:
             and not unresolved_ids
             and second_level_current
             and included_ids
+            and not incomplete_metric_ids
         )
         analysis_decisions = (
             self.store.list_analysis_decisions(job["id"], subject, result_version)
@@ -1354,6 +1376,11 @@ class ControlPlaneService:
                 "complete": bool(subjects) and not unresolved_ids,
                 "subjects": subjects,
                 "unresolved_subject_ids": unresolved_ids,
+                "missing_qc_subject_ids": missing_qc_ids,
+                "unexpected_qc_subject_ids": unexpected_qc_ids,
+                "duplicate_qc_subject_ids": duplicate_qc_ids,
+                "qc_identity_valid": qc_identity_valid,
+                "incomplete_metric_subject_ids": incomplete_metric_ids,
             },
             "sample": {
                 "version": sample_version,
@@ -1366,16 +1393,23 @@ class ControlPlaneService:
                 "status": (
                     "current" if second_level_current else
                     "recalculating" if pending_recalculation else
-                    "stale" if sample_changed else "unavailable"
+                    "stale" if sample_changed and not active_recalculation else
+                    "unverified_model" if computation_available else "unavailable"
                 ),
                 "blocked": not second_level_current,
                 "recalculation_required": sample_changed,
                 "active_recalculation": active_recalculation,
                 "pending_recalculation": pending_recalculation,
                 "versions": recalculations,
+                "model_integrity_verified": model_verified,
+                "scientific_audit": scientific_audit,
                 "reason": (
                     "The effective sample differs from the sample used to compute the second level."
-                    if sample_changed
+                    if sample_changed and not second_level_current else
+                    "The executed-model audit is missing, failed or not current."
+                    if not model_verified else
+                    "QC participant identities do not match the frozen design."
+                    if not qc_identity_valid
                     else None
                 ),
             },

@@ -18,7 +18,7 @@ except ImportError:  # Allows contract tests before production dependencies are 
 
 
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
-SECOND_LEVEL_COMPUTATION_REVISION = "frozen-design-aliases-v1"
+SECOND_LEVEL_COMPUTATION_REVISION = "frozen-design-audit-v2"
 
 
 def token_digest(token: str) -> str:

@@ -21,10 +21,24 @@
       "ART time-series image",
       "before/after denoising image"
     ],
-    "thresholds": ["global_signal_z", "motion_mm"]
+    "thresholds": [
+      "global_signal_z",
+      "motion_mm"
+    ],
+    "availability_policy": {
+      "unavailable_value": null,
+      "numeric_values_require": "metric_availability true and a finite numeric value",
+      "legacy_values_without_availability": "unavailable until original evidence is verified",
+      "contiguous_outliers": "Count flagged ART volume rows in acquisition order",
+      "denoising": "Native CONN QA requires visual review; exported tSNR and DVARS are preprocessed before denoising"
+    }
   },
   "subject_decisions": {
-    "allowed": ["accept", "exclude", "needs_review"],
+    "allowed": [
+      "accept",
+      "exclude",
+      "needs_review"
+    ],
     "exclude_requires_justification": true,
     "storage": "append-only",
     "audit_fields": [
@@ -37,7 +51,7 @@
   "sample": {
     "version": "SHA-256 of the ordered included subject identifiers",
     "on_exclusion_change": "Existing second-level results become stale and blocked",
-    "unblock": "Run a versioned second-level task whose computed sample matches the reviewed sample",
+    "unblock": "A current versioned second-level result requires a passed executed-model audit for the reviewed sample.",
     "minimum_one_sample_size": 2,
     "history": "Earlier group results and artifacts remain immutable and addressable"
   },
@@ -49,7 +63,9 @@
       "technical completeness passed",
       "every subject is accepted or excluded",
       "at least one subject remains",
-      "second-level results are current for the effective sample"
+      "second-level results are current for the effective sample",
+      "quantitative ART evidence is available and internally consistent for included subjects",
+      "saved model audit verifies sample, design, rank, residual degrees of freedom and contrast"
     ]
   },
   "experiment_quality_report": {
