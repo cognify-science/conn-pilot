@@ -73,16 +73,24 @@ an investigator by default. They persist explicit, attributable judgments.
 | `get_parameter_guidance` | Read context-filtered, literature-reported options. |
 | `compare_method_options` | Compare supported alternatives and their evidence records. |
 | `get_evidence_record` | Read one normalized bibliographic evidence record. |
-| `validate_parameter_choice` | Check value, contract compatibility, and cited observations without persisting. |
+| `validate_parameter_choice` | Check a literature component's reported-value alignment; does not enforce the project's executable contract. |
 | `record_method_decision` | Persist selected value, rationale, evidence IDs, and snapshot. |
-| `list_method_decisions` | Read exact project-level parameter provenance. |
+| `list_method_decisions` | Read exact project-level parameter provenance and frozen selection audits when available. |
 | `list_unresolved_project_parameters` | Read parameters still blocking validation. |
-| `get_project_parameter_guidance` | Read guidance in the project's dataset and pipeline context. |
-| `resolve_project_parameter` | Validate and persist a project parameter decision. |
+| `get_project_parameter_guidance` | Read executable candidates, all mapped evidence assessments, context alignment and reasons for ineligibility. |
+| `resolve_project_parameter` | Enforce executable compatibility and an explicit normalized citation match; persist the investigator's choice with a frozen audit. |
 
 Guidance calls return evidence and constraints. They do not rank a value as
 universally optimal. Mutation calls require a value and rationale and preserve
 the evidence snapshot used at decision time.
+
+For `resolver_revision=context-and-strict-normalization-v2`, inspect
+`evidence_assessments`, contextual differences and unassessed dimensions before
+presenting alternatives. Inspect `selection_audit_status` in parameter-resolution
+status reads; a context change requires renewed review for an audited choice.
+Older deployed services and historical decisions may lack these fields. Verify
+the response revision rather than assuming the repository version is deployed.
+See [parameter-selection semantics](../science/parameter-selection.md).
 
 ## Recommended read sequence for an AI assistant
 

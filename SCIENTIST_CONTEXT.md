@@ -109,3 +109,14 @@ Important implementation limits remain: some CONN options inherit toolbox
 defaults; actual design-matrix rank and degrees of freedom still require
 inspection; structured hypothesis evidence is not automatically extracted from
 every completed model. The methods and FAQ pages explain these boundaries.
+
+## Parameter resolver assessment revision
+
+New parameter resolutions use `context-and-strict-normalization-v2`. The existing
+MCP guidance reports all mapped observations, execution exclusions, descriptive
+family/modality alignment and unassessed applicability dimensions. A hashed
+`selection_audit` freezes the decision-time candidate set, context and citations;
+recorded context changes require review before a new submission. Legacy decisions
+have no retroactive audit. This improves traceability, not evidence that the
+chosen values outperform alternatives. See [parameter selection](docs/science/parameter-selection.md)
+and [evaluation protocol](docs/science/parameter-selector-evaluation.md).

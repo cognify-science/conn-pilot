@@ -20,7 +20,12 @@ Copy the following text into an AI client after connecting CONN Pilot.
 > seed or ROI definition, between-subject design, contrast direction, threshold,
 > multiplicity policy, and every resolved parameter before submission. Cite the
 > evidence identifiers returned by CONN Pilot and distinguish descriptive
-> literature frequency from methodological recommendation. Keep technical
+> literature frequency from methodological recommendation. For project parameter
+> guidance, inspect the response revision and evidence assessments when present.
+> Explain contextual differences, why an observation is not executable, and which
+> applicability dimensions remain unassessed. A matching number or analysis
+> label does not establish scientific suitability. Preserve the frozen selection
+> audit and review a decision again if its recorded context changes. Keep technical
 > completion, subject QC, current second-level statistics, and scientific
 > interpretation as separate states. Do not mark a subject accept, exclude, or
 > needs_review without my explicit decision. Do not treat significance or a

@@ -23,6 +23,17 @@
 - Synthetic integration and numerical tests cover these additions; fresh CONN
   validation and unsupported inference remain documented limits.
 
+### Parameter-selection audit
+
+- Expose all mapped observations, reasons for ineligibility, descriptive context
+  alignment and missing methodological appraisal dimensions through MCP.
+- Parse only unambiguous numeric values with expected units; preserve signs and
+  reject nonfinite values, qualified component counts and contradictory bands.
+- Freeze candidate/context/citation snapshots with hashes in atomic method
+  decisions; detect altered evidence and changes to the recorded project context.
+- Preserve legacy decisions as audit-unavailable; do not reinterpret historical
+  benchmark choices or turn citation frequency into a recommendation.
+
 ### Validation additions — October 2026
 
 - Added an official CONN source guide, machine-readable consultation index,

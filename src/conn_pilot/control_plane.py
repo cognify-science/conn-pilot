@@ -37,7 +37,7 @@ from .catalog import Catalog
 from .control_store import PostgresControlStore
 from .io import nested_get
 from .literature import LiteratureEvidenceService
-from .parameter_resolver import ParameterResolver
+from .parameter_resolver import ParameterResolver, selection_audit_integrity
 from .project import validate_project as validate_project_definition
 from .quality_report import build_experiment_quality_report
 from .qc_evidence import normalize_qc, assess_subject_metrics
@@ -810,7 +810,7 @@ class ControlPlaneService:
             record = nested_get(spec, f"parameters.{path}")
             if isinstance(record, dict) and any(
                 key in record
-                for key in ("method_decision_id", "evidence_ids", "corpus_version")
+                for key in ("method_decision_id", "evidence_ids", "corpus_version", "selection_audit")
             ):
                 raise ValueError(
                     f"parameters.{path} decision provenance must be created by "
@@ -906,6 +906,7 @@ class ControlPlaneService:
                         "evidence_ids",
                         "rationale",
                         "corpus_version",
+                        "selection_audit",
                         "created_at",
                     )
                 }
@@ -1585,6 +1586,7 @@ class ControlPlaneService:
             "confirmed_by_investigator": True,
             "evidence_ids": validation["exact_evidence_ids"],
             "corpus_version": validation["corpus_version"],
+            "selection_audit": validation["selection_audit"],
         }
         result = self.store.resolve_project_parameter(
             subject,
@@ -1615,6 +1617,7 @@ class ControlPlaneService:
                 "remaining_unresolved_count": len(remaining),
                 "remaining_parameter_paths": [item["parameter_path"] for item in remaining],
                 "scientific_validity_determined": False,
+                "selection_audit": validation["selection_audit"],
             },
             warnings=[
                 "This confirms the investigator's documented choice; it does not establish scientific validity."
@@ -1678,11 +1681,29 @@ class ControlPlaneService:
             status["resolution_integrity"] = (
                 "verified" if matches else "missing_or_mismatched_decision"
             )
+            audit = decision.get("selection_audit") if decision else None
+            status["selection_audit_status"] = "legacy_unavailable"
+            if audit is not None or record.get("selection_audit") is not None:
+                intact = bool(isinstance(audit, dict) and audit == record.get("selection_audit")
+                    and selection_audit_integrity(audit, decision.get("evidence_snapshot", []))
+                    and audit.get("selected_value") == record.get("value")
+                    and audit.get("exact_evidence_ids") == record.get("evidence_ids")
+                    and audit.get("parameter_path") == status["parameter_path"])
+                status["selection_audit_status"] = "verified" if intact else "failed"
+                if not intact:
+                    status["resolved"] = False
+                    status["resolution_integrity"] = "selection_audit_mismatch"
+                elif not self.parameter_resolver.audit_context_matches(
+                        audit, self._resolver_project(project, dataset), pipeline):
+                    status["resolved"] = False
+                    status["selection_audit_status"] = "context_changed"
+                    status["resolution_integrity"] = "selection_context_changed"
         return statuses
 
     @staticmethod
     def _resolver_project(project: dict[str, Any], dataset: dict[str, Any]) -> dict[str, Any]:
-        return {**project, "dataset_metadata": dataset.get("metadata", {})}
+        return {**project, "dataset_metadata": dataset.get("metadata", {}),
+                "dataset_fingerprint": dataset.get("fingerprint")}
 
 
 def materialize_remote_project(

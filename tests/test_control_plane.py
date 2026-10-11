@@ -393,6 +393,7 @@ class FakeStore:
             "owner_subject": owner_subject,
             "project_id": project_id,
             "parameter_path": parameter_path,
+            "selection_audit": parameter_record.get("selection_audit"),
             "component_id": component_id,
             "parameter_name": parameter_name,
             "selected_value": selected_value,
@@ -1055,11 +1056,58 @@ class ControlPlaneTests(unittest.IsolatedAsyncioTestCase):
             evidence_ids=["invented"],
             corpus_version="invented",
         )
+
         service = ControlPlaneService(FakeStore(), ROOT / "catalog")
         with self.assertRaisesRegex(ValueError, "must be created by"):
             service.create_project(
                 "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", spec
             )
+
+    def test_selection_audit_is_persisted_and_detects_changed_context_or_citations(self) -> None:
+        store = FakeStore()
+        service = ControlPlaneService(store, ROOT / "catalog", require_literature_decisions=True)
+        project_id = service.create_project(
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+        )["data"]["project"]["id"]
+        path = "preprocessing.smoothing_fwhm_mm"
+        option = service.get_project_parameter_guidance("owner", project_id, path)["data"]["options"][0]
+        response = service.resolve_project_parameter(
+            "owner", project_id, path, option["value"], [option["evidence_ids"][0]],
+            "Investigator reviewed the spatial scale and source applicability."
+        )
+        audit = response["data"]["selection_audit"]
+        self.assertEqual(audit, service.list_method_decisions("owner", project_id)["data"]["decisions"][0]["selection_audit"])
+
+        def status():
+            return next(item for item in service.list_unresolved_project_parameters("owner", project_id)["data"]["parameters"]
+                        if item["parameter_path"] == path)
+
+        self.assertTrue(status()["resolved"])
+        self.assertEqual(status()["selection_audit_status"], "verified")
+        original_tr = store.datasets["study_001"]["metadata"]["tr_seconds"]
+        store.datasets["study_001"]["metadata"]["tr_seconds"] = 3
+        self.assertFalse(status()["resolved"])
+        self.assertEqual(status()["resolution_integrity"], "selection_context_changed")
+        store.datasets["study_001"]["metadata"]["tr_seconds"] = original_tr
+        store.method_decisions[0]["evidence_snapshot"][0]["value"] = "invented"
+        self.assertFalse(status()["resolved"])
+        self.assertEqual(status()["resolution_integrity"], "selection_audit_mismatch")
+
+    def test_legacy_parameter_decisions_are_not_backfilled_with_an_invented_audit(self) -> None:
+        store = FakeStore(); service = ControlPlaneService(store, ROOT / "catalog")
+        project_id = service.create_project(
+            "owner", "study_001", "rsfmri_seed_to_voxel", "1.0.0", remote_spec()
+        )["data"]["project"]["id"]
+        path = "preprocessing.smoothing_fwhm_mm"
+        option = service.get_project_parameter_guidance("owner", project_id, path)["data"]["options"][0]
+        service.resolve_project_parameter("owner", project_id, path, option["value"],
+            [option["evidence_ids"][0]], "Investigator reviewed this value.")
+        store.method_decisions[0].pop("selection_audit")
+        store.projects[project_id]["spec"]["parameters"]["preprocessing"]["smoothing_fwhm_mm"].pop("selection_audit")
+        status = next(item for item in service.list_unresolved_project_parameters("owner", project_id)["data"]["parameters"]
+                      if item["parameter_path"] == path)
+        self.assertTrue(status["resolved"])
+        self.assertEqual(status["selection_audit_status"], "legacy_unavailable")
 
     def test_resolution_status_detects_a_mismatched_persisted_decision(self) -> None:
         store = FakeStore()

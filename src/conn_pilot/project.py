@@ -29,7 +29,7 @@ PIPELINE_FIELDS = {"id", "version"}
 PROJECT_FIELDS = {"name", "research_question"}
 DATASET_FIELDS = {"layout", "root", "tr_seconds"}
 PARAMETER_RECORD_REQUIRED_FIELDS = {"value", "source", "rationale", "confirmed_by_investigator"}
-PARAMETER_RECORD_OPTIONAL_FIELDS = {"method_decision_id", "evidence_ids", "corpus_version"}
+PARAMETER_RECORD_OPTIONAL_FIELDS = {"method_decision_id", "evidence_ids", "corpus_version", "selection_audit"}
 PARAMETER_RECORD_FIELDS = PARAMETER_RECORD_REQUIRED_FIELDS | PARAMETER_RECORD_OPTIONAL_FIELDS
 SEED_FIELDS = {"name", "conn_source", "rationale", "confirmed_by_investigator"}
 SUBJECT_FIELDS = {"id", "functional", "structural"}
@@ -323,6 +323,8 @@ def _validate_parameters(project: dict[str, Any], pipeline: ResolvedPipeline, er
             errors.append(f"parameters.{path} requires source and rationale")
         if spec.get("confirmation_required") and not record.get("confirmed_by_investigator"):
             errors.append(f"parameters.{path} is not confirmed by the investigator")
+        if "selection_audit" in record and not isinstance(record["selection_audit"], dict):
+            errors.append(f"parameters.{path}.selection_audit must be an object")
         if "method_decision_id" in record:
             if not record.get("method_decision_id"):
                 errors.append(f"parameters.{path}.method_decision_id cannot be empty")

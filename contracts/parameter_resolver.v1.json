@@ -29,11 +29,57 @@
     "The project parameter record stores the decision id, evidence ids and corpus version.",
     "The method decision stores the exact evidence snapshot used at decision time.",
     "Changing a parameter invalidates the previous project validation.",
-    "The execution plan exposes the resolved records and their decision provenance."
+    "The execution plan exposes the resolved records and their decision provenance.",
+    "New resolved choices store selection_audit atomically with the parameter and immutable method decision.",
+    "The audit freezes all candidates and assessments reconstructed at resolution time, context, corpus and contract hashes, exact citations and cited alternative values.",
+    "Hashes check audit and citation content consistency. They do not certify extraction accuracy or scientific validity.",
+    "Recorded context or executable contract changes require a new documented choice for audited decisions.",
+    "Legacy decisions retain their previous provenance checks and selection_audit_status=legacy_unavailable; no audit is invented retrospectively."
   ],
   "policy": {
     "automatic_default": false,
     "frequency_is_not_a_recommendation": true,
-    "scientific_validity_requires_human_judgment": true
-  }
+    "scientific_validity_requires_human_judgment": true,
+    "context_alignment_is_not_scientific_applicability": true,
+    "different_reported_values_are_not_scientific_conflicts": true
+  },
+  "assessment_schema_version": "conn_pilot_parameter_assessment_v1",
+  "resolver_revision": "context-and-strict-normalization-v2",
+  "guidance_assessment": {
+    "scope": "All observations mapped to the executable parameter, including inferred and unreported records.",
+    "option_limit": "Applies only to options; options_truncated identifies omitted options.",
+    "eligibility_reasons": [
+      "not_explicit",
+      "unparsed_or_ambiguous",
+      "incompatible_with_execution"
+    ],
+    "context_alignment_fields": [
+      "primary_family",
+      "modality_or_task"
+    ],
+    "context_alignment_statuses": [
+      "matching",
+      "different",
+      "unknown"
+    ],
+    "study_design_equivalence": "not_assessed",
+    "unassessed_dimensions": [
+      "population",
+      "acquisition_tr",
+      "voxel_resolution",
+      "motion_metric_definition",
+      "source_role",
+      "risk_of_bias"
+    ],
+    "scientific_applicability": "requires_review",
+    "counts": "Observation counts and unique paper counts are descriptive; neither measures evidence strength.",
+    "option_order": "descriptive_observation_frequency_then_value",
+    "normalization": "Expected units, unambiguous scalar or Hz interval, preserved signs and finite values only."
+  },
+  "audit_statuses": [
+    "verified",
+    "legacy_unavailable",
+    "failed",
+    "context_changed"
+  ]
 }

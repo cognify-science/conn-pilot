@@ -112,6 +112,7 @@ class PostgresControlStore:
             )
             """,
             "ALTER TABLE cp_method_decisions ADD COLUMN IF NOT EXISTS parameter_path TEXT",
+            "ALTER TABLE cp_method_decisions ADD COLUMN IF NOT EXISTS selection_audit JSONB",
             """
             CREATE TABLE IF NOT EXISTS cp_jobs (
                 id TEXT PRIMARY KEY,
@@ -448,7 +449,7 @@ class PostgresControlStore:
                 """
                 SELECT id, owner_subject, project_id, parameter_path, component_id, parameter_name,
                        selected_value, evidence_ids, rationale, corpus_version,
-                       evidence_snapshot, created_at::text AS created_at
+                       evidence_snapshot, selection_audit, created_at::text AS created_at
                 FROM cp_method_decisions
                 WHERE project_id=%s AND owner_subject=%s
                 ORDER BY created_at, id
@@ -500,12 +501,12 @@ class PostgresControlStore:
                     INSERT INTO cp_method_decisions(
                         id, owner_subject, project_id, parameter_path, component_id,
                         parameter_name, selected_value, evidence_ids, rationale,
-                        corpus_version, evidence_snapshot
+                        corpus_version, evidence_snapshot, selection_audit
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id, owner_subject, project_id, parameter_path, component_id,
                               parameter_name, selected_value, evidence_ids, rationale,
-                              corpus_version, evidence_snapshot, created_at::text AS created_at
+                              corpus_version, evidence_snapshot, selection_audit, created_at::text AS created_at
                     """,
                     (
                         decision_id,
@@ -519,6 +520,7 @@ class PostgresControlStore:
                         rationale,
                         corpus_version,
                         Jsonb(evidence_snapshot),
+                        Jsonb(parameter_record.get("selection_audit")),
                     ),
                 ).fetchone()
                 connection.execute(

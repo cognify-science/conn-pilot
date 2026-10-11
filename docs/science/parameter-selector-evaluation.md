@@ -91,6 +91,15 @@ instability. A credible success statement should require:
 
 ## Current evidence level
 
+The resolver's `context-and-strict-normalization-v2` revision now exposes
+per-observation eligibility, contextual differences, missing appraisal dimensions
+and frozen decision audits through the existing MCP operations. Regression tests
+check ambiguous units/ranges, Nyquist rejection, explicit versus inferred support,
+context changes, citation tampering and persistence. These are engineering
+checks, not blinded expert ratings or downstream performance validation. The
+revision has not been shown to improve scientific outcomes over the October
+benchmark choices; that still requires the comparator arms above.
+
 The existing six-run validation contributes one selector arm and one reserved
 expert comparison. The shared baseline matched for all comparable parameters;
 slice-timing policy and different seed questions were explicitly non-comparable.

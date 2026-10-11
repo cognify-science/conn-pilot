@@ -44,6 +44,29 @@ class _Connection:
 
 
 class ControlStoreHeartbeatTests(unittest.TestCase):
+    def test_parameter_choice_and_frozen_audit_are_written_in_the_same_transaction(self) -> None:
+        class SelectionConnection(_Connection):
+            def execute(self, statement, parameters):
+                result = super().execute(statement, parameters)
+                if "SELECT spec FROM cp_projects" in statement:
+                    return _Result({"spec": {}})
+                if "INSERT INTO cp_method_decisions" in statement:
+                    return _Result({"id": "decision", "selection_audit": parameters[-1].obj})
+                return result
+
+        connection = SelectionConnection(); store = PostgresControlStore("postgresql://unused")
+        audit = {"schema_version": "conn_pilot_parameter_assessment_v1", "audit_sha256": "example"}
+        record = {"value": 8, "selection_audit": audit}
+        with patch.object(store, "_connect", return_value=connection):
+            result = store.resolve_project_parameter("owner", "project", "preprocessing.smoothing_fwhm_mm",
+                record, "smoothing", "fwhm", 8, ["evidence"], "reason", "corpus", [{"evidence_id": "evidence"}])
+        self.assertEqual(result["decision"]["selection_audit"], audit)
+        self.assertEqual(result["parameter_record"]["selection_audit"], audit)
+        insert = connection.executed[1]
+        self.assertEqual(insert[0].count("%s"), len(insert[1]))
+        persisted = connection.executed[-1][1][0].obj
+        self.assertEqual(persisted["parameters"]["preprocessing"]["smoothing_fwhm_mm"]["selection_audit"], audit)
+
     def test_job_heartbeat_keeps_worker_online(self) -> None:
         connection = _Connection()
         store = PostgresControlStore("postgresql://unused")
