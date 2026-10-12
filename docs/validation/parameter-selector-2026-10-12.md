@@ -1,6 +1,6 @@
 # Parameter-selector engineering validation — 12 October 2026
 
-This validation covers `context-and-strict-normalization-v2` and its numeric
+This validation covers `context-and-strict-normalization-v2.1` and its numeric
 overflow repair. It checks the decision workflow, persistence and public MCP
 responses. It does not establish scientific superiority over expert pipelines.
 
@@ -15,11 +15,20 @@ responses. It does not establish scientific superiority over expert pipelines.
 | Export | A reproducibility ZIP retains the exact citations and selection audits; hashes verify after JSON serialization. |
 | PostgreSQL 16 | JSONB round-trip and a fresh service retain all choices; schema migration is idempotent; legacy decisions remain audit-unavailable; owner isolation is enforced. |
 | Interruption | A simulated failure after inserting a decision rolls back both the decision and project mutation; the next attempt succeeds. |
+| Client serialization | An integral numeric value such as `8.0` can serialize as `8` in JavaScript without invalidating a new v2 audit; changing it to a boolean still fails integrity checks. |
 
 The extended tests exposed numeric overflow: sufficiently long numeric text
 could normalize to infinity. Conversion now rejects overflowing/nonfinite values
 before they can become executable candidates or invalid JSONB content. Tests
 also cover large numeric input that previously raised `OverflowError`.
+
+Authenticated deployment testing additionally exposed a v1 hash-format problem:
+JavaScript clients serialize integral floats as integers. The v2 audit format
+normalizes those equivalent numeric representations before hashing; its format
+is explicitly identified by `hash_encoding`. Original v1 records retain their
+original hashes and are verified using the original encoder. For v1, verification
+requires the original typed JSON representation rather than a reserialized
+JavaScript copy. Existing decisions are not retrospectively rewritten.
 
 ## Reproduction
 

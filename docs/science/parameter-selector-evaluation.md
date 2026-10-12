@@ -95,7 +95,7 @@ The [12 October engineering validation](../validation/parameter-selector-2026-10
 documents the MCP, persistence, migration, interruption and export checks. These
 are a prerequisite for, rather than a substitute for, the scientific benchmark.
 
-The resolver's `context-and-strict-normalization-v2` revision now exposes
+The resolver's `context-and-strict-normalization-v2.1` revision now exposes
 per-observation eligibility, contextual differences, missing appraisal dimensions
 and frozen decision audits through the existing MCP operations. Regression tests
 check ambiguous units/ranges, Nyquist rejection, explicit versus inferred support,

@@ -84,7 +84,7 @@ Guidance calls return evidence and constraints. They do not rank a value as
 universally optimal. Mutation calls require a value and rationale and preserve
 the evidence snapshot used at decision time.
 
-For `resolver_revision=context-and-strict-normalization-v2`, inspect
+For `resolver_revision=context-and-strict-normalization-v2.1`, inspect
 `evidence_assessments`, contextual differences and unassessed dimensions before
 presenting alternatives. Inspect `selection_audit_status` in parameter-resolution
 status reads; a context change requires renewed review for an audited choice.

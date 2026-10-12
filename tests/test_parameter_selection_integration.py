@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import io
 import json
 import sys
@@ -58,6 +59,45 @@ class ParameterSelectionBoundaryTests(unittest.TestCase):
             for value in values:
                 with self.subTest(normalizer=normalizer):
                     self.assertIsNone(normalize_observed_value(normalizer, value))
+
+    def test_audit_survives_javascript_style_integral_number_serialization(self):
+        pipeline = self.catalog.resolve("rsfmri_seed_to_voxel", "1.0.0")
+        option = self.resolver.guidance(self.project, pipeline, "preprocessing.smoothing_fwhm_mm")["options"][0]
+        selected = self.resolver.validate_choice(self.project, pipeline, "preprocessing.smoothing_fwhm_mm",
+            option["value"], option["evidence_ids"])
+
+        def javascript_numbers(value):
+            if isinstance(value, float) and value.is_integer():
+                return int(value)
+            if isinstance(value, dict):
+                return {k: javascript_numbers(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [javascript_numbers(v) for v in value]
+            return value
+
+        transported = json.loads(json.dumps(javascript_numbers(selected)))
+        self.assertEqual(transported["selection_audit"]["schema_version"], "conn_pilot_parameter_assessment_v2")
+        self.assertTrue(selection_audit_integrity(transported["selection_audit"], transported["evidence_snapshot"]))
+        transported["selection_audit"]["selected_value"] = True
+        self.assertFalse(selection_audit_integrity(transported["selection_audit"], transported["evidence_snapshot"]))
+
+    def test_original_v1_audit_hashes_remain_readable_without_rewriting_them(self):
+        def original_hash(value):
+            return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":")).encode("utf-8")).hexdigest()
+        evidence = [{"evidence_id": "synthetic", "value": 8.0}]
+        audit = {"schema_version": "conn_pilot_parameter_assessment_v1", "selected_value": 8.0,
+                 "evidence_snapshot_sha256": original_hash(evidence)}
+        audit["audit_sha256"] = original_hash(audit)
+        frozen_hash = audit["audit_sha256"]
+        self.assertTrue(selection_audit_integrity(audit, evidence))
+        self.assertEqual(audit["audit_sha256"], frozen_hash)
+        pipeline = self.catalog.resolve("rsfmri_seed_to_voxel", "1.0.0")
+        project = copy.deepcopy(self.project)
+        project["design"]["contrasts"][0]["weights"] = [1.0]
+        audit["experiment_context"] = self.resolver._experiment_context(project, pipeline, legacy=True)
+        audit["pipeline_contract_sha256"] = original_hash(pipeline.definition["project_contract"])
+        self.assertTrue(self.resolver.audit_context_matches(audit, project, pipeline))
 
     def test_bad_identifiers_and_wrong_parameter_evidence_are_rejected(self):
         pipeline = self.catalog.resolve("rsfmri_seed_to_voxel", "1.0.0")
@@ -125,7 +165,7 @@ class ParameterSelectionMCPTests(unittest.IsolatedAsyncioTestCase):
                     path = entry["parameter_path"]
                     guidance = await invoke("get_project_parameter_guidance",
                         {"project_id": project_id, "parameter_path": path, "limit": 1})
-                    self.assertEqual(guidance["data"]["resolver_revision"], "context-and-strict-normalization-v2")
+                    self.assertEqual(guidance["data"]["resolver_revision"], "context-and-strict-normalization-v2.1")
                     option = guidance["data"]["options"][0]
                     await invoke("resolve_project_parameter", {"project_id": project_id, "parameter_path": path,
                         "selected_value": option["value"], "evidence_ids": [option["evidence_ids"][0]],

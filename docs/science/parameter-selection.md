@@ -32,7 +32,7 @@ evidence and allowed by the executable contract.
 
 ## What the evidence means
 
-The deterministic resolver revision `context-and-strict-normalization-v2` adds
+The deterministic resolver revision `context-and-strict-normalization-v2.1` adds
 the assessment below. It improves the audit of a choice; it does not implement
 an optimizer or silently change investigator-confirmed parameters.
 
@@ -106,6 +106,14 @@ Older decisions remain readable and retain their previous provenance checks,
 with `selection_audit_status=legacy_unavailable`. They are not retroactively
 credited with this new audit. A hash establishes content consistency, not the
 truth of a paper extraction or the scientific adequacy of a rationale.
+
+New `conn_pilot_parameter_assessment_v2` audits normalize integral numeric values
+before hashing, so a client serializing `8.0` as `8` preserves verification.
+Use the released `selection_audit_integrity` verifier for this versioned encoding.
+Original v1 audits remain readable with their original encoder and hashes;
+their verification requires the original typed JSON, because the old format
+distinguished integral floats from integers. Neither format authenticates a
+source or proves scientific appropriateness.
 
 ### Reporting status and scientific interpretation
 

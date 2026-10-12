@@ -112,7 +112,7 @@ every completed model. The methods and FAQ pages explain these boundaries.
 
 ## Parameter resolver assessment revision
 
-New parameter resolutions use `context-and-strict-normalization-v2`. The existing
+New parameter resolutions use `context-and-strict-normalization-v2.1`. The existing
 MCP guidance reports all mapped observations, execution exclusions, descriptive
 family/modality alignment and unassessed applicability dimensions. A hashed
 `selection_audit` freezes the decision-time candidate set, context and citations;

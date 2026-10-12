@@ -15,8 +15,9 @@ from .project import parameter_value_errors
 
 
 RESOLVER_SCHEMA = "conn_pilot_parameter_resolver_v1"
-ASSESSMENT_SCHEMA = "conn_pilot_parameter_assessment_v1"
-RESOLVER_REVISION = "context-and-strict-normalization-v2"
+ASSESSMENT_SCHEMA = "conn_pilot_parameter_assessment_v2"
+LEGACY_ASSESSMENT_SCHEMA = "conn_pilot_parameter_assessment_v1"
+RESOLVER_REVISION = "context-and-strict-normalization-v2.1"
 
 
 class ParameterResolver:
@@ -187,6 +188,7 @@ class ParameterResolver:
             "schema_version": ASSESSMENT_SCHEMA,
             "resolver_revision": RESOLVER_REVISION,
             "parameter_path": parameter_path,
+            "hash_encoding": "sorted-json-integral-floats-as-integers-utf8-v1",
             "selected_value": normalized_choice,
             "corpus_version": self.literature.corpus_version,
             "corpus_sha256": self.literature.corpus_sha256,
@@ -256,8 +258,10 @@ class ParameterResolver:
 
     def audit_context_matches(self, audit: dict[str, Any], project: dict[str, Any],
                               pipeline: ResolvedPipeline) -> bool:
-        return (audit.get("experiment_context") == self._experiment_context(project, pipeline)
-                and audit.get("pipeline_contract_sha256") == _digest(pipeline.definition["project_contract"]))
+        legacy = audit.get("schema_version") == LEGACY_ASSESSMENT_SCHEMA
+        digest = _legacy_digest if legacy else _digest
+        return (audit.get("experiment_context") == self._experiment_context(project, pipeline, legacy=legacy)
+                and audit.get("pipeline_contract_sha256") == digest(pipeline.definition["project_contract"]))
 
     def _observations(self, guidance: dict[str, Any], *, explicit_only: bool = True) -> list[dict[str, Any]]:
         allowed = {
@@ -292,7 +296,7 @@ class ParameterResolver:
         return nested_get(project, "dataset.tr_seconds")
 
     def _experiment_context(
-        self, project: dict[str, Any], pipeline: ResolvedPipeline
+        self, project: dict[str, Any], pipeline: ResolvedPipeline, *, legacy: bool = False
     ) -> dict[str, Any]:
         project_spec = project.get("spec", project)
         return {
@@ -300,7 +304,7 @@ class ParameterResolver:
             "pipeline_version": pipeline.version,
             "family": pipeline.definition.get("family"),
             "design_type": nested_get(project_spec, "design.type"),
-            "design_sha256": _digest(project_spec.get("design", {})),
+            "design_sha256": (_legacy_digest if legacy else _digest)(project_spec.get("design", {})),
             "seed_sources": [seed.get("conn_source") for seed in project_spec.get("seeds", [])
                              if isinstance(seed, dict)],
             "tr_seconds": self._tr_seconds(project),
@@ -357,13 +361,19 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
 
 
+def _legacy_digest(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
 def selection_audit_integrity(audit: dict[str, Any], evidence_snapshot: list[dict[str, Any]]) -> bool:
     """Check frozen audit and citation contents without consulting a newer corpus."""
-    if not isinstance(audit, dict) or audit.get("schema_version") != ASSESSMENT_SCHEMA:
+    if not isinstance(audit, dict) or audit.get("schema_version") not in {ASSESSMENT_SCHEMA, LEGACY_ASSESSMENT_SCHEMA}:
         return False
+    digest = _legacy_digest if audit["schema_version"] == LEGACY_ASSESSMENT_SCHEMA else _digest
     payload = {key: value for key, value in audit.items() if key != "audit_sha256"}
-    return (audit.get("audit_sha256") == _digest(payload)
-            and audit.get("evidence_snapshot_sha256") == _digest(evidence_snapshot))
+    return (audit.get("audit_sha256") == digest(payload)
+            and audit.get("evidence_snapshot_sha256") == digest(evidence_snapshot))
 
 
 def normalize_observed_value(normalizer: str, value: Any) -> Any | None:
@@ -406,7 +416,19 @@ def normalize_observed_value(normalizer: str, value: Any) -> Any | None:
 
 
 def _canonical(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return json.dumps(_normalize_json_numbers(value), ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":"), allow_nan=False)
+
+
+def _normalize_json_numbers(value: Any) -> Any:
+    """Preserve numeric equality after JSON clients serialize 8.0 as 8."""
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {key: _normalize_json_numbers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_json_numbers(item) for item in value]
+    return value
 
 
 def _finite_float(value: Any) -> float | None:

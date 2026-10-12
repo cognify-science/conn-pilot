@@ -43,8 +43,8 @@
     "context_alignment_is_not_scientific_applicability": true,
     "different_reported_values_are_not_scientific_conflicts": true
   },
-  "assessment_schema_version": "conn_pilot_parameter_assessment_v1",
-  "resolver_revision": "context-and-strict-normalization-v2",
+  "assessment_schema_version": "conn_pilot_parameter_assessment_v2",
+  "resolver_revision": "context-and-strict-normalization-v2.1",
   "guidance_assessment": {
     "scope": "All observations mapped to the executable parameter, including inferred and unreported records.",
     "option_limit": "Applies only to options; options_truncated identifies omitted options.",
@@ -81,5 +81,10 @@
     "legacy_unavailable",
     "failed",
     "context_changed"
-  ]
+  ],
+  "readable_assessment_versions": [
+    "conn_pilot_parameter_assessment_v1",
+    "conn_pilot_parameter_assessment_v2"
+  ],
+  "audit_hash_encoding": "sorted-json-integral-floats-as-integers-utf8-v1"
 }
