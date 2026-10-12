@@ -115,7 +115,7 @@ class FakeStore:
         self, owner_subject: str, dataset_id: str, pipeline_id: str, pipeline_version: str, spec: dict[str, Any]
     ) -> dict[str, Any]:
         value = {
-            "id": "project-1",
+            "id": f"project-{len(self.projects) + 1}",
             "owner_subject": owner_subject,
             "dataset_id": dataset_id,
             "pipeline_id": pipeline_id,

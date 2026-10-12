@@ -373,7 +373,7 @@ def normalize_observed_value(normalizer: str, value: Any) -> Any | None:
         return value if isinstance(value, int) and not isinstance(value, bool) else None
     if normalizer in {"millimeters", "standard_deviations"}:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return float(value) if math.isfinite(value) else None
+            return _finite_float(value)
         if not isinstance(value, str):
             return None
         number = r"([+-]?(?:\d+(?:\.\d*)?|\.\d+))"
@@ -384,22 +384,34 @@ def normalize_observed_value(normalizer: str, value: Any) -> Any | None:
             pattern = (r"(?:(?:bold change|z)\s*)?(?:greater than\s+|>=?|\u2265|\u00b1)?\s*"
                        + number + r"\s*(?:standard deviations?|sd)?")
         match = re.fullmatch(pattern, value.strip(), flags=re.IGNORECASE)
-        return float(match[1]) if match else None
+        return _finite_float(match[1]) if match else None
     if normalizer == "frequency_pair_hz":
         if (
             isinstance(value, list)
             and len(value) == 2
             and all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in value)
         ):
-            return [float(value[0]), float(value[1])] if all(math.isfinite(item) for item in value) else None
+            values = [_finite_float(item) for item in value]
+            return values if all(item is not None for item in values) else None
         if not isinstance(value, str) or "inconsistent" in value.lower() or "not used" in value.lower():
             return None
         number = r"([+-]?(?:\d+(?:\.\d*)?|\.\d+))"
         match = re.fullmatch(number + r"\s*[-\u2013\u2014]\s*" + number + r"\s*(?:hz)?",
                              value.strip(), flags=re.IGNORECASE)
-        return [float(match[1]), float(match[2])] if match else None
+        if not match:
+            return None
+        values = [_finite_float(match[1]), _finite_float(match[2])]
+        return values if all(item is not None for item in values) else None
     raise ValueError(f"Unknown literature value normalizer: {normalizer}")
 
 
 def _canonical(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _finite_float(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (OverflowError, ValueError):
+        return None
+    return number if math.isfinite(number) else None

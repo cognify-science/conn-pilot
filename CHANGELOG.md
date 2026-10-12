@@ -25,6 +25,10 @@
 
 ### Parameter-selection audit
 
+- Complete both-workflow MCP and ZIP round-trip coverage, plus a mandatory
+  PostgreSQL 16 CI job for migration, durable choices, rollback and ownership.
+- Reject numeric text and input that overflow floating-point conversion.
+
 - Expose all mapped observations, reasons for ineligibility, descriptive context
   alignment and missing methodological appraisal dimensions through MCP.
 - Parse only unambiguous numeric values with expected units; preserve signs and
