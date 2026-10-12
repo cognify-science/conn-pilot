@@ -4,6 +4,35 @@ This validation covers `context-and-strict-normalization-v2.1` and its numeric
 overflow repair. It checks the decision workflow, persistence and public MCP
 responses. It does not establish scientific superiority over expert pipelines.
 
+## Recorded test outcome
+
+Tested implementation: [`00761211eb3cb0461c17e625c7d0556403983dd4`](https://github.com/cognify-science/conn-pilot/commit/00761211eb3cb0461c17e625c7d0556403983dd4).
+The [GitHub validation run](https://github.com/cognify-science/conn-pilot/actions/runs/38250243968)
+passed both jobs.
+
+| Environment | Outcome |
+| --- | --- |
+| Windows, Python 3.12 | 151 tests discovered: 147 passed and the four database tests skipped because no disposable local PostgreSQL was configured. |
+| Linux CI, Python 3.11 | The same portable suite passed; plugin packaging passed. |
+| PostgreSQL 16 CI service | All four real-database tests passed, completing coverage of all 151 distinct tests. |
+| Authenticated deployed MCP | Revision `context-and-strict-normalization-v2.1` confirmed; 14 current v2 decisions across two technical projects persisted and passed hash verification after JavaScript serialization. |
+
+The integration scenario covers both analysis families and all seven parameter
+decisions. The simulated interruption test explicitly verifies rollback before
+retry; it is not a claim of testing arbitrary host power loss at every point.
+
+Deployment checks reused two clearly labeled synthetic engineering projects on
+the registered reference dataset. Both execution plans validated. The 14 prior
+v1 audit records remained verified on the server and unchanged after creating
+the new v2 decisions. Requests with unknown citations were rejected and did not
+append a decision. The seven historical WU120 method decisions, its completed
+result version, and the system's job-state counts were preserved. No CONN job or
+subject/scientific acceptance decision was created by this validation.
+
+**Engineering validation is complete for the boundaries above.** Scientific
+performance assessment remains a separate benchmark; these test results do not
+establish better parameter choices or stronger hypothesis evidence.
+
 ## Coverage
 
 | Boundary | Evidence exercised |
